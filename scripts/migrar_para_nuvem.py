@@ -47,8 +47,9 @@ print('Conta criada:', EMAIL)
 
 # 2) Estado do portal sem histórico e sem regras de outras contas
 body = local('select body from public.app_state where id=1')
-for k in ('fieldPermissions', 'projectWorkAccess', 'projectResponsibleLinks', 'rowFilters', 'requests'):
-    body[k] = {} if isinstance(body.get(k), dict) else []
+for k in ('fieldPermissions', 'projectWorkAccess', 'projectResponsibleLinks', 'rowFilters'):
+    body[k] = {}  # sempre objeto: as funções do banco gravam por chave (id do usuário/projeto)
+body['requests'] = []
 body['logs'], body['notes'] = [], []
 body['users'] = [u for u in body.get('users', []) if u.get('id') == 'admin']
 call('POST', '/rest/v1/app_state', {'id': 1, 'body': body}, {'Prefer': 'resolution=merge-duplicates'})

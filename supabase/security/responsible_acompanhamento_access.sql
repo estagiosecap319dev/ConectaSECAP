@@ -169,8 +169,9 @@ begin
  if cardinality(names)>0 and secap_private.acomp_field(p_project) is null then raise exception 'Este projeto não possui o campo Responsável Acompanhamento.';end if;
  select coalesce(array_agg(o.id),'{}') into before_ids from public.obras o where o.project_id=p_project and secap_private.user_has_work(p_user,o);
  select body into state from public.app_state where id=1 for update;
- state:=jsonb_set(state,'{projectResponsibleLinks}',coalesce(state->'projectResponsibleLinks','{}'));
- state:=jsonb_set(state,array['projectResponsibleLinks',p_user::text],coalesce(state->'projectResponsibleLinks'->p_user::text,'{}'));
+ -- Os vínculos são um objeto {uid: {projeto: [nomes]}}; se vierem em outro formato (ex.: [] de uma migração), recomeça vazio.
+ if jsonb_typeof(state->'projectResponsibleLinks') is distinct from 'object' then state:=jsonb_set(state,'{projectResponsibleLinks}','{}');end if;
+ if jsonb_typeof(state->'projectResponsibleLinks'->p_user::text) is distinct from 'object' then state:=jsonb_set(state,array['projectResponsibleLinks',p_user::text],'{}');end if;
  state:=jsonb_set(state,array['projectResponsibleLinks',p_user::text,p_project],to_jsonb(names));
  update public.app_state set body=state,updated_at=now() where id=1;
  -- Grava obras individuais e campos (valida, registra log e sincroniza responsáveis).
