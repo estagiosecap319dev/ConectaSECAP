@@ -112,5 +112,9 @@
   } else if (hasSavedSession()) {
     api.show('Carregando o sistema…');
     setProgress(15);
+  } else {
+    // Visitante sem sessão: a tela cobre o carregamento até a página de login aparecer.
+    api.show('Carregando o portal…');
+    setProgress(15);
   }
 })();
