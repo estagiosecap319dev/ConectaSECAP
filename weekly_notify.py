@@ -58,6 +58,10 @@ DEFAULT_CONFIG = {
     },
 }
 
+ENV_CONFIG = {'SECAP_SUPABASE_URL': 'supabase_url', 'SECAP_PORTAL_URL': 'portal_url'}
+ENV_SMTP = {'SMTP_HOST': 'host', 'SMTP_PORTA': 'porta', 'SMTP_SEGURANCA': 'seguranca', 'SMTP_USUARIO': 'usuario',
+            'SMTP_SENHA': 'senha', 'SMTP_REMETENTE': 'remetente', 'SMTP_NOME_REMETENTE': 'nome_remetente'}
+
 STATUS = {'ativo': False, 'ultima_execucao': None, 'ultimo_erro': None, 'resumo': None}
 _lock = threading.Lock()
 
@@ -79,7 +83,14 @@ def load_config() -> dict:
         smtp = dict(cfg['smtp'], **(user.get('smtp') or {}))
         cfg.update(user)
         cfg['smtp'] = smtp
-    key = cfg.get('service_role_key') or os.environ.get('SECAP_SERVICE_ROLE_KEY', '')
+    # Variáveis de ambiente (usadas na Vercel, onde não existe data/) têm prioridade sobre o arquivo.
+    for name, key in ENV_CONFIG.items():
+        if os.environ.get(name):
+            cfg[key] = os.environ[name]
+    for name, key in ENV_SMTP.items():
+        if os.environ.get(name):
+            cfg['smtp'][key] = os.environ[name]
+    key = os.environ.get('SECAP_SERVICE_ROLE_KEY') or cfg.get('service_role_key', '')
     if not key:
         sheet_cfg = DATA_DIR / 'sheet-sync.json'
         if sheet_cfg.exists():
