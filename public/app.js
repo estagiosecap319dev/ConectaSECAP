@@ -2932,7 +2932,7 @@ function history() {
     ${auditError ? `<div class="banner" role="alert">${esc(auditError)}</div>` : ''}
     ${auditLoading || !auditLoaded ? '<p role="status">Consultando registros…</p>' : ''}
     <section class="panel audit-panel"><div class="tablewrap"><table aria-label="Registros de alteração"><thead><tr>
-    <th>Data e Hora</th><th>Usuário/Responsável</th><th>Ação</th><th>Qual Projeto</th><th>Campo</th><th>Registro Anterior</th><th>Registro Atualizado</th><th>Justificativa</th><th>Recuperação</th>
+    <th>Data e Hora</th><th>Usuário/<wbr>Responsável</th><th>Ação</th><th>Qual Projeto</th><th>Campo</th><th>Registro Anterior</th><th>Registro Atualizado</th><th>Justificativa</th><th>Recuperação</th>
     </tr></thead><tbody>${logs
       .map((l, auditIndex) => {
         const project = db.projects.find((p) => p.id === l.project);

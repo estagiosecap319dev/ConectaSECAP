@@ -770,3 +770,84 @@
   -webkit-line-clamp: 2 !important;
   max-height: 2.8em !important;
 }
+
+/* ---- Auditoria: colunas com largura definida ----
+   Sem larguras, o navegador espremia "Ação" (texto quebrando palavra por palavra)
+   e cortava "Recuperação". A coluna de recuperação fica fixa à direita. */
+.audit-panel .tablewrap table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1240px;
+}
+.audit-panel th:nth-child(1) { width: 100px; }
+.audit-panel th:nth-child(2) { width: 120px; }
+.audit-panel th:nth-child(3) { width: 200px; }
+.audit-panel th:nth-child(4) { width: 155px; }
+.audit-panel th:nth-child(5) { width: 150px; }
+.audit-panel th:nth-child(6),
+.audit-panel th:nth-child(7) { width: 135px; }
+.audit-panel th:nth-child(8) { width: 120px; }
+.audit-panel th:nth-child(9) { width: 140px; }
+.audit-panel td,
+.audit-panel td:nth-child(5),
+.audit-panel td:nth-child(6),
+.audit-panel td:nth-child(7),
+.audit-panel td.audit-reason {
+  min-width: 0;
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  vertical-align: top;
+  line-height: 1.45;
+}
+.audit-panel th {
+  white-space: normal;
+  line-height: 1.3;
+}
+.audit-panel .audit-action {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.45;
+}
+.audit-panel td .desc {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #64748b;
+}
+.audit-panel th:last-child,
+.audit-panel td:last-child {
+  position: sticky;
+  right: 0;
+  box-shadow: -8px 0 12px -10px rgba(15, 23, 42, 0.35);
+}
+.audit-panel td:last-child {
+  z-index: 1;
+  background: #fff;
+}
+.audit-panel th:last-child {
+  z-index: 3;
+}
+.audit-panel td:last-child .btn {
+  white-space: nowrap;
+}
+/* Regras globais de tabela usam nowrap/ellipsis com prioridade; na Auditoria o texto deve quebrar. */
+.audit-panel .tablewrap table th,
+.audit-panel .tablewrap table td {
+  padding: 14px 12px !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
+}
+.audit-panel .tablewrap table th {
+  letter-spacing: 0.3px !important;
+  overflow-wrap: normal !important;
+  hyphens: none;
+}
