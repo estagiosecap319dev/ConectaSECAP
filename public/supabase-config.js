@@ -11,9 +11,9 @@
           'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0',
       }
     : {
-        url: 'https://yawnjpffwulxhykmigfn.supabase.co',
+        url: 'https://rutwtconjydmikegbtsg.supabase.co',
         anonKey:
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlhd25qcGZmd3VseGh5a21pZ2ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ1MDk1NzQsImV4cCI6MjExMDA4NTU3NH0.nmksPz9o5b0ZItl37NmwpKBSstglcLJTbgcjXjPZosU',
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1dHd0Y29uanlkbWlrZWdidHNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjMyOTUsImV4cCI6MjEwODY5OTI5NX0.pwt27HGNlYeAWh0kuAt5iK85Wj-cDiK4ilaBQfRbW2E',
       };
 })();
 
