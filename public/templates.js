@@ -1975,7 +1975,7 @@ async function submitExitAuditChecklist() {
   exitAuditSubmitting = true;
   if (submitButton) {
     submitButton.disabled = true;
-    submitButton.textContent = 'Salvando as obras…';
+    submitButton.innerHTML = '<span class="save-spinner" aria-hidden="true"></span>Salvando as obras…';
   }
   let autoSavedCount = 0;
   try {

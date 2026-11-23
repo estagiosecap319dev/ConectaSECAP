@@ -109,10 +109,7 @@ obraCard = function (p, r, b) {
 const workSaving = new Set();
 async function saveWorkUpdate(p, r, next) {
   if (workSaving.has(r.id)) return false;
-  if (!workOwnerText(next, p)) {
-    notify('Informe pelo menos um responsável pela obra.', 'error');
-    return false;
-  }
+  // Responsável pela próxima ação é opcional: a obra pode ser salva sem ele.
   const backend = window.SECAP_OBRAS_BACKEND;
   if (!backend) {
     notify('Conexão ao banco indisponível. A obra não foi alterada.', 'error');

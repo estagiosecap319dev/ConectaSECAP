@@ -27,6 +27,7 @@ const APP_SCRIPTS = [
   'project-work-selection.js',
   'project-permission-review.js',
   'work-responsible-monitor.js',
+  'saving-indicator.js',
 ];
 
 function showBootError(message) {

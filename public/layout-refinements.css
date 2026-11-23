@@ -851,3 +851,61 @@
   overflow-wrap: normal !important;
   hyphens: none;
 }
+
+/* ---- Indicador de salvamento das obras (saving-indicator.js) ---- */
+.save-indicator {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 2147482000;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 999px;
+  background: #003856;
+  color: #fff;
+  font: 600 13px/1 Poppins, system-ui, sans-serif;
+  box-shadow: 0 10px 28px rgba(0, 56, 86, 0.28);
+  animation: save-indicator-in 0.22s ease-out;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.save-indicator[hidden] { display: none; }
+.save-indicator.is-leaving { opacity: 0; transform: translateY(8px); }
+.save-indicator-dot,
+.save-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #f37021;
+  animation: save-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+.save-indicator[data-state='done'] { background: #157347; }
+.save-indicator[data-state='done'] .save-indicator-dot {
+  animation: none;
+  border: 0;
+  background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center / 14px no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+.save-spinner {
+  width: 14px;
+  height: 14px;
+  margin-right: 8px;
+  vertical-align: -2px;
+}
+@keyframes save-spin { to { transform: rotate(360deg); } }
+@keyframes save-indicator-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-indicator-dot, .save-spinner { animation-duration: 2.4s; }
+  .save-indicator { animation: none; }
+}
+@media (max-width: 600px) {
+  .save-indicator { right: 16px; bottom: 16px; }
+}
