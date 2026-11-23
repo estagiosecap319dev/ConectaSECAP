@@ -670,31 +670,8 @@ async function saveObraApi(sb, data, authUser, authRole) {
     }
   }
 
-  const ownerState = await sb.rpc('secap_read_state');
-  if (ownerState.error)
-    return jsonResponse(500, { error: 'Não foi possível validar o responsável da obra.' });
-  const ownerProject = ownerState.data?.projects?.find((p) => String(p.id) === projectId);
-  const ownerKey = ownerProject?.biMapping?.owner || 'responsavel';
-  const ownerValue = record[ownerKey] ?? record.responsavel;
-  if (
-    !String(ownerValue || '')
-      .split(/[;\n]+/)
-      .some(
-        (name) =>
-          name.trim() &&
-          ![
-            '—',
-            '-',
-            'sem responsável',
-            'sem responsavel',
-            'não informado',
-            'nao informado',
-          ].includes(name.trim().toLowerCase())
-      )
-  )
-    return jsonResponse(400, {
-      error: 'É obrigatório informar pelo menos um responsável pela obra.',
-    });
+  // "Responsável pela próxima ação" é opcional (work_responsibility_optional.sql):
+  // a obra pode ser salva com o campo vazio.
   const row = recordToObraRow(projectId, record);
   // Obra existente: usa UPDATE puro. Um upsert dispara primeiro o gatilho BEFORE INSERT
   // (tg_op = 'INSERT'), que bloqueia qualquer campo preenchido e não liberado — por isso
