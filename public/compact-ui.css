@@ -1042,6 +1042,10 @@ body {
     background 0.15s,
     color 0.15s;
 }
+.presp-add.presp-edit svg {
+  width: 14px;
+  height: 14px;
+}
 .presp-add:hover,
 .presp-add:focus-visible {
   background: #f37021;
@@ -1088,13 +1092,13 @@ body {
 .resp-remove {
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: 0;
+  border: 1px solid #e2e8f0;
   border-radius: 50%;
-  background: transparent;
-  color: #64748b;
+  background: #f8fafc;
+  color: #b42318;
   cursor: pointer;
 }
 .resp-remove:hover {

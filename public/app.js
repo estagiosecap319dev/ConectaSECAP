@@ -1158,8 +1158,10 @@ function projectResponsibles(p) {
             .join(', ')
         )}">+${list.length - MAX}</span>`
       : '';
+  // Com responsáveis já definidos, o botão vira "editar": é nele que se adiciona e se remove.
+  const addLabel = list.length ? 'Adicionar ou remover responsáveis' : 'Adicionar responsáveis';
   const add = editable
-    ? `<button type="button" class="presp-add" title="Adicionar responsáveis" aria-label="Adicionar responsáveis ao projeto ${esc(p.name)}" onclick="event.stopPropagation();openProjectResponsibles('${esc(p.id)}')" onkeydown="event.stopPropagation()">+</button>`
+    ? `<button type="button" class="presp-add${list.length ? ' presp-edit' : ''}" title="${addLabel}" aria-label="${addLabel} do projeto ${esc(p.name)}" onclick="event.stopPropagation();openProjectResponsibles('${esc(p.id)}')" onkeydown="event.stopPropagation()">${list.length ? icon('edit') : '+'}</button>`
     : '';
   const empty = list.length ? '' : '<span class="presp-empty">Sem responsável</span>';
   return `<div class="presp"><small>Responsáveis</small><div class="presp-list">${chips}${more}${empty}${add}</div></div>`;
@@ -1187,7 +1189,7 @@ function openProjectResponsibles(pid) {
   modal(
     'Responsáveis do projeto',
     `<div class="resp-picker">
-       <p class="subtitle">${esc(p.name)} · escolha as contas de usuários responsáveis por este projeto.</p>
+       <p class="subtitle">${esc(p.name)} · marque as contas responsáveis por este projeto. Para retirar alguém, clique no × ao lado do nome (ou desmarque na lista) e depois em <b>Salvar responsáveis</b>.</p>
        <div class="resp-selected" id="respSelected" aria-live="polite"></div>
        <div class="field">
          <label for="respSearch">Buscar usuário</label>
