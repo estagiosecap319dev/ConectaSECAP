@@ -40,6 +40,8 @@ Execute cada arquivo inteiro, **nesta ordem**, no SQL Editor do projeto (ou com 
 | 30 | `supabase/security/recent_editor_details.sql` |
 | 31 | `supabase/security/weekly_notify.sql` |
 | 32 | `supabase/security/admin_notifications.sql` |
+| 33 | `supabase/security/user_notifications.sql` |
+| 34 | `supabase/security/work_responsibles_manual.sql` (Responsável pela próxima ação preenchido à mão) |
 
 ### NÃO executar num banco novo
 

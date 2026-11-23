@@ -22,7 +22,7 @@ A sincronia roda dentro do servidor do portal (`server.py`), a cada 60 segundos,
 
 As linhas são ligadas pela coluna **ID** (campo `codigo`). As colunas são ligadas pelo nome do cabeçalho, igual à importação do portal. A aba e a linha de cabeçalho são detectadas automaticamente (ou fixadas em `"aba"`).
 
-O campo **Responsável pela próxima ação** fica fora da sincronia por padrão (`campos_ignorados`), porque o portal o preenche sozinho a partir das Permissões do projeto.
+O campo **Responsável pela próxima ação** fica fora da sincronia por padrão (`campos_ignorados`). Desde 23/11/2026 ele é preenchido à mão no portal (`work_responsibles_manual.sql`); para que a planilha também o atualize, remova `"responsavel"` de `campos_ignorados`.
 
 > Atenção: quem edita a planilha não passa pelas permissões do portal (Responsável Acompanhamento, campos liberados). Mantenha como editores da planilha apenas pessoas que podem alterar qualquer obra. Toda alteração vinda da planilha fica registrada na Auditoria.
 
