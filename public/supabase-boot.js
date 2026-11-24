@@ -31,6 +31,7 @@ const APP_SCRIPTS = [
   'project-permission-review.js',
   'work-responsible-monitor.js',
   'saving-indicator.js',
+  'sidebar-resize.js',
 ];
 
 function showBootError(message) {

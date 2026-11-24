@@ -933,3 +933,51 @@
 @media (max-width: 600px) {
   .save-blocked-banner { flex-direction: column; align-items: stretch; }
 }
+
+/* ---- Alça para ajustar a largura do menu lateral (sidebar-resize.js) ---- */
+.sidebar-resizer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--sb-w) - 4px);
+  z-index: 60;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.sidebar-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s;
+}
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after,
+body.sidebar-resizing .sidebar-resizer::after {
+  background: #f37021;
+}
+.sidebar-resizer:focus-visible { outline: none; }
+body.sidebar-resizing,
+body.sidebar-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+/* Durante o arraste, sem animação: o menu acompanha o mouse. */
+body.sidebar-resizing .sidebar,
+body.sidebar-resizing .main,
+body.sidebar-resizing .main > header {
+  transition: none !important;
+}
+/* Só aparece com o menu visível em tela larga. */
+body:not(:has(.sidebar)) .sidebar-resizer,
+body.menu-collapsed .sidebar-resizer {
+  display: none;
+}
+@media (max-width: 720px) {
+  .sidebar-resizer { display: none; }
+}
