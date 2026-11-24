@@ -157,8 +157,13 @@ def deliver(cfg, msg: EmailMessage) -> str:
         safe = ''.join(c if c.isalnum() else '_' for c in str(msg['To']))[:60]
         (OUTBOX / f'{dt.datetime.now():%Y%m%d-%H%M%S}-{safe}.eml').write_bytes(bytes(msg))
         return 'teste'
-    port = int(smtp.get('porta') or 587)
-    mode = (smtp.get('seguranca') or 'starttls').lower()
+    port = int(str(smtp.get('porta') or 587).strip())
+    mode = str(smtp.get('seguranca') or 'starttls').strip().lower()
+    # Porta 465 é sempre SSL direto (com starttls o servidor fecha a conexão sem resposta).
+    if port == 465 or mode in ('ssl/tls', 'smtps'):
+        mode = 'ssl'
+    elif mode in ('tls', 'start_tls', 'start-tls', ''):
+        mode = 'starttls'
     ctx = ssl.create_default_context()
     if mode == 'ssl':
         server = smtplib.SMTP_SSL(smtp['host'], port, context=ctx, timeout=30)
