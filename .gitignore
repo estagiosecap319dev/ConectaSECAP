@@ -6,3 +6,6 @@
 __pycache__/
 *.py[cod]
 /supabase/.branches/
+
+# Documentação interna: fica só no computador, fora do GitHub
+/LEIA-ME-*.md
