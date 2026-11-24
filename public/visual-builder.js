@@ -1149,7 +1149,7 @@ restoreRoute = function (r) {
   oldRestoreVisual(r);
 };
 function renderVisualCard(p, rs, c) {
-  return `<section class="panel visual-card ${c.wide ? 'visual-wide' : ''}"><div class="panelhead"><div><h2>${esc(c.title)}</h2>${c.subtitle ? `<small>${esc(c.subtitle)}</small>` : ''}</div>${canEdit(p) ? `<button class="iconbtn visual-edit" aria-label="Editar gráfico ${esc(c.title)}" title="Editar gráfico" onclick="editVisual('${p.id}','${c.id}')">${icon('edit')}</button>` : ''}</div><div class="visual-card-body">${visualMount(p, rs, c)}</div></section>`;
+  return `<section class="panel visual-card ${c.wide ? 'visual-wide' : ''}" ${typographyAttrs(c)}><div class="panelhead"><div><h2>${esc(c.title)}</h2>${c.subtitle ? `<small>${esc(c.subtitle)}</small>` : ''}</div>${canEdit(p) ? `<button class="iconbtn visual-edit" aria-label="Editar gráfico ${esc(c.title)}" title="Editar gráfico" onclick="editVisual('${p.id}','${c.id}')">${icon('edit')}</button>` : ''}</div><div class="visual-card-body">${visualMount(p, rs, c)}</div></section>`;
 }
 function metricResult(p, rs, k) {
   if (k.field === '@records') return rs.length;
@@ -1174,7 +1174,7 @@ biOverview = function (p, rs) {
     ar = attentionRows(rs, p),
     kpis = design.kpis.filter((k) => k.visible !== false),
     charts = design.charts.filter((c) => c.visible !== false);
-  return `<div class="visual-dashboard layout-${design.layout || 'executive'} density-${design.density || 'comfortable'}"><div class="visual-metrics">${kpis.map((k, i) => `<article class="visual-kpi ${i < 2 ? 'spotlight' : ''}" style="--kpi-color:${esc(k.color || '#003856')}"><div class="visual-kpi-head"><span>${esc(k.title)}</span>${canEdit(p) ? `<button class="iconbtn" title="Editar indicador" aria-label="Editar indicador ${esc(k.title)}" onclick="editMetric('${p.id}','${k.id}')">${icon('edit')}</button>` : icon(k.field === '@records' ? 'folder' : k.format === 'currency' ? 'money' : 'chart')}</div><strong>${formatVisual(metricResult(p, rs, k), k.format || 'number')}</strong><small>${esc(metricFoot(p, k))}</small></article>`).join('')}</div><div class="executive-reading"><div>${icon('eye')}<p><strong>${rs.length} iniciativas nesta seleção.</strong> ${ar.length} precisam de atenção e ${rs.filter((r) => isFinished(r, p)).length} estão concluídas. Clique nos gráficos para restringir a análise e consultar os registros.</p></div>${canEdit(p) ? btn('Personalizar BI', "switchBiSection('designer')", 'edit') : ''}</div><div class="visual-board">${charts.map((c) => renderVisualCard(p, rs, c)).join('')}</div>${charts.length ? '' : empty('Seu painel está pronto para ser montado', 'Abra Personalizar BI e adicione os gráficos que ajudam na sua decisão.')}<div class="chart-grid wide">${chartPanel(
+  return `<div class="visual-dashboard layout-${design.layout || 'executive'} density-${design.density || 'comfortable'}"><div class="visual-metrics">${kpis.map((k, i) => `<article class="visual-kpi ${i < 2 ? 'spotlight' : ''}" ${typographyAttrs(k, '--kpi-color:' + esc(k.color || '#003856'))}><div class="visual-kpi-head"><span>${esc(k.title)}</span>${canEdit(p) ? `<button class="iconbtn" title="Editar indicador" aria-label="Editar indicador ${esc(k.title)}" onclick="editMetric('${p.id}','${k.id}')">${icon('edit')}</button>` : icon(k.field === '@records' ? 'folder' : k.format === 'currency' ? 'money' : 'chart')}</div><strong>${formatVisual(metricResult(p, rs, k), k.format || 'number')}</strong><small>${esc(metricFoot(p, k))}</small></article>`).join('')}</div><div class="executive-reading"><div>${icon('eye')}<p><strong>${rs.length} iniciativas nesta seleção.</strong> ${ar.length} precisam de atenção e ${rs.filter((r) => isFinished(r, p)).length} estão concluídas. Clique nos gráficos para restringir a análise e consultar os registros.</p></div>${canEdit(p) ? btn('Personalizar BI', "switchBiSection('designer')", 'edit') : ''}</div><div class="visual-board">${charts.map((c) => renderVisualCard(p, rs, c)).join('')}</div>${charts.length ? '' : empty('Seu painel está pronto para ser montado', 'Abra Personalizar BI e adicione os gráficos que ajudam na sua decisão.')}<div class="chart-grid wide">${chartPanel(
     'O que precisa de decisão',
     'Próximas providências e responsáveis',
     ar
@@ -1443,7 +1443,7 @@ function editVisual(id, key = '') {
   const c = visualDraft.config;
   modal(
     existing ? 'Editar gráfico' : 'Adicionar gráfico',
-    `<div class="chart-editor-layout"><form id="chartEditorForm" oninput="updateVisualDraft()" onchange="updateVisualDraft()" onsubmit="event.preventDefault();saveVisual()"><div class="field"><label>Nome do gráfico *</label><input name="title" aria-label="Nome do gráfico" required value="${esc(c.title)}"></div><div class="field"><label>Texto de apoio</label><input name="subtitle" aria-label="Texto de apoio do gráfico" value="${esc(c.subtitle || '')}" placeholder="Explique em uma frase o que deve ser observado"></div><div class="field"><label>Tipo de gráfico</label><select name="type" aria-label="Tipo de gráfico">${Object.entries(
+    `<div class="chart-editor-layout"><form id="chartEditorForm" oninput="updateVisualDraft()" onchange="updateVisualDraft()" onsubmit="event.preventDefault();saveVisual()"><div class="field"><label>Nome do gráfico *</label><input name="title" aria-label="Nome do gráfico" required value="${esc(c.title)}"></div>${typographyFields(c)}<div class="field"><label>Texto de apoio</label><input name="subtitle" aria-label="Texto de apoio do gráfico" value="${esc(c.subtitle || '')}" placeholder="Explique em uma frase o que deve ser observado"></div><div class="field"><label>Tipo de gráfico</label><select name="type" aria-label="Tipo de gráfico">${Object.entries(
       visualTypes
     )
       .map(([k, n]) => `<option value="${k}" ${c.type === k ? 'selected' : ''}>${n}</option>`)
@@ -1507,6 +1507,7 @@ function readVisualForm() {
   const d = new FormData(form);
   return {
     ...visualDraft.config,
+    ...readTypography(d),
     title: String(d.get('title') || '').trim(),
     subtitle: String(d.get('subtitle') || '').trim(),
     type: d.get('type'),
@@ -1667,7 +1668,7 @@ function editMetric(id, key = '') {
       )
       .join(
         ''
-      )}</select></div></div><div class="field"><label>Cor de destaque</label><input name="color" type="color" value="${k.color || '#003856'}" style="height:40px"></div><div class="metric-live-preview"><small id="metricPreviewTitle">${esc(k.title)}</small><strong id="metricPreviewValue"></strong><span>Prévia com a seleção atual do projeto</span></div></form>`,
+      )}</select></div></div><div class="field"><label>Cor de destaque</label><input name="color" type="color" value="${k.color || '#003856'}" style="height:40px"></div>${typographyFields(k)}<div class="metric-live-preview"><small id="metricPreviewTitle">${esc(k.title)}</small><strong id="metricPreviewValue"></strong><span>Prévia com a seleção atual do projeto</span></div></form>`,
     (key ? btn('Remover indicador', `removeMetric('${id}','${k.id}')`, 'trash') : '') +
       btn('Voltar', 'closeModal()', 'arrow') +
       `<button class="btn primary" type="submit" form="metricEditorForm">Salvar indicador</button>`
@@ -1677,6 +1678,7 @@ function editMetric(id, key = '') {
 function readMetricForm() {
   const f = $('#metricEditorForm');
   return {
+    ...readTypography(new FormData(f)),
     title: f.elements.title.value.trim(),
     field: f.elements.field.value,
     agg: f.elements.agg.value,
@@ -1755,3 +1757,6 @@ function selectVisualFilter(field, value, series = '', segment = '') {
   render();
 }
 render();
+
+const visualOptionsBeforeTypography = visualOptions;
+visualOptions = function(p, rs, c, d) { return chartTypography(visualOptionsBeforeTypography(p, rs, c, d), c); };

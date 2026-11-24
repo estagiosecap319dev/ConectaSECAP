@@ -32,7 +32,7 @@
       '<span class="sl-arc a1" aria-hidden="true"></span>' +
       '<span class="sl-arc a2" aria-hidden="true"></span>' +
       '<div class="sl-card">' +
-      '<img class="sl-logo" src="logo-negative.png" alt="Prefeitura de Goiânia">' +
+      '<img class="sl-logo" src="marca-goiania-negativa.svg" alt="Prefeitura de Goiânia">' +
       '<div class="sl-ring" aria-hidden="true"><span></span></div>' +
       '<div><p class="sl-eyebrow">Portal de projetos</p><h1 class="sl-title">Preparando o Conecta SECAP</h1></div>' +
       '<p class="sl-step">Verificando suas credenciais…</p>' +

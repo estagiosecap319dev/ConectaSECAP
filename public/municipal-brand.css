@@ -1,0 +1,43 @@
+/* Assinatura negativa oficial — manual municipal, pp. 14, 18 e 19. */
+:root{--sb-w:344px}
+.sidebar{background:#002F47!important}
+.sidebar .brand{box-sizing:border-box;display:flex!important;align-items:center!important;justify-content:center!important;width:100%;height:auto!important;min-height:280px!important;max-height:none!important;padding:44px!important;background:#002F47!important;overflow:visible!important}
+.sidebar .brand img.brand-logo{display:block!important;flex:0 0 240px!important;width:240px!important;min-width:240px!important;max-width:240px!important;height:auto!important;max-height:none!important;object-fit:contain!important;aspect-ratio:700/561!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;filter:none!important;box-shadow:none!important;opacity:1!important}
+.login .loginart{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:center!important;background:#002F47!important;padding:64px clamp(44px,5vw,88px) 72px!important;min-height:100dvh}
+.login .loginart img.loginart-logo{display:block!important;position:relative!important;top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;flex:none!important;width:260px!important;min-width:240px!important;max-width:260px!important;height:auto!important;max-height:none!important;aspect-ratio:700/561!important;object-fit:contain!important;padding:0!important;margin:0 0 48px!important;border:0!important;border-radius:0!important;filter:none!important;box-shadow:none!important;opacity:1!important;background:transparent!important}
+.login .loginart::before,.login .loginart::after{border-color:#F37021!important;box-shadow:0 0 0 18px #002F47,0 0 0 34px #f370213d,0 0 0 52px #002F47,0 0 0 68px #f3702124!important}
+@media(max-width:720px){:root{--sb-w:344px}.sidebar{max-width:100vw!important}.login .loginart{min-height:0!important;padding:52px 44px 56px!important}.login .loginart img.loginart-logo{width:240px!important;max-width:240px!important;margin-bottom:44px!important}.login .loginart h1{font-size:30px!important}}
+@media(max-width:340px){.login .loginart{padding-left:32px!important;padding-right:32px!important}.sidebar .brand{padding-left:32px!important;padding-right:32px!important}}
+/* Ajustes visuais solicitados: assinatura horizontal e espaços das abas. */
+.sidebar .brand{justify-content:flex-start!important;min-height:168px!important;padding:44px 16px 32px!important}
+.sidebar .brand img.brand-logo{flex:0 1 280px!important;width:280px!important;min-width:0!important;max-width:100%!important;height:auto!important;aspect-ratio:981/321!important}
+.login .loginart{position:relative!important;padding-top:240px!important}
+.login .loginart img.loginart-logo{position:absolute!important;top:44px!important;left:44px!important;width:380px!important;min-width:0!important;max-width:calc(100% - 88px)!important;height:auto!important;aspect-ratio:981/321!important;margin:0!important}
+.admin-institution{grid-template-columns:minmax(0,1fr) auto!important}
+.balanced-main-grid{align-items:stretch!important}
+.overview-balanced .balanced-status{display:flex;flex-direction:column;height:100%}
+.overview-balanced .balanced-status>.panelbody{flex:1;display:flex;min-height:420px!important}
+.overview-balanced .balanced-status #dashStatus{flex:1;min-width:0;width:100%;height:auto!important;min-height:420px!important}
+.content:has(.audit-panel)>.pagefooter{display:none!important}
+.content .audit-panel{width:100%;margin-bottom:0}
+.content .audit-panel>.tablewrap{height:calc(100dvh - 280px)!important;min-height:480px!important;max-height:none!important;overflow:auto!important}
+.content .audit-panel .tablewrap table{min-width:1420px!important;width:100%!important}
+.content .audit-panel .tablewrap table th{font-size:13px!important;line-height:1.5!important;padding:17px 14px!important}
+.content .audit-panel .tablewrap table td{font-size:13px!important;line-height:1.6!important;padding:18px 14px!important}
+.content .audit-panel .tablewrap table td .desc{font-size:12px!important;line-height:1.6!important}
+.content .audit-panel .audit-action,.content .audit-panel td .btn{font-size:13px!important;line-height:1.5!important}
+@media(max-width:1150px){.overview-balanced .balanced-status>.panelbody,.overview-balanced .balanced-status #dashStatus{min-height:360px!important}}
+@media(max-width:720px){.login .loginart{padding-top:210px!important}.login .loginart img.loginart-logo{top:40px!important;left:32px!important;max-width:calc(100% - 64px)!important}.content .audit-panel>.tablewrap{height:65dvh!important;min-height:360px!important}.admin-institution{grid-template-columns:minmax(0,1fr)!important}}
+/* Leitura do menu e composição do login conforme a marcação enviada. */
+.sidebar .nav,.sidebar .sidebarfooter .nav{font-size:14px!important;line-height:1.5!important;min-height:42px!important}
+.sidebar .subnav{font-size:13px!important;line-height:1.5!important}
+.login .loginart{justify-content:flex-start!important;padding-top:clamp(230px,28vh,270px)!important}
+.login .loginart h1{box-sizing:border-box;max-width:320px!important;width:100%;font-size:40px!important;line-height:1.2!important;letter-spacing:-.7px!important;margin:16px 0 28px!important;overflow-wrap:normal}
+.login .loginart p{box-sizing:border-box;max-width:320px!important;width:100%;font-size:15px!important;line-height:1.75!important;margin:0!important}
+.login::before{content:"";position:absolute;left:50%;bottom:0;width:170px;height:170px;border-top-right-radius:100%;background:#edf4f7;z-index:-1;pointer-events:none}
+@media(max-width:720px){.login .loginart{padding-top:210px!important}.login .loginart h1{font-size:32px!important;max-width:320px!important}.login::before{display:none}}
+/* Posição e quebras da frase conforme a última referência do login. */
+
+.login .loginart h1{max-width:580px!important;font-size:64px!important;line-height:1.14!important;letter-spacing:-.5px!important;margin:16px 0 76px!important}
+.login .loginart p{max-width:490px!important;font-size:25px!important;line-height:1.75!important}
+@media(max-width:720px){.login .loginart{justify-content:flex-start!important;padding-top:210px!important;padding-bottom:56px!important}.login .loginart h1{font-size:32px!important;max-width:390px!important}.login .loginart p{max-width:390px!important}}

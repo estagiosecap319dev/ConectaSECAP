@@ -49,6 +49,7 @@ function workFieldEditable(p, key) {
 }
 function workStageStatus(stage) {
   const value = canonicalStatus(stage);
+  if (value === 'Ainda não definido') return value;
   if (value === 'Em planejamento') return 'Em planejamento';
   return [
     'Concluído',
@@ -78,11 +79,11 @@ obraStage = function (r, p, b = activeBoard()) {
       (stage) =>
         stage ===
         (OBRA_STAGE_FALLBACK[status] ||
-          (['Em planejamento', 'Não iniciado', 'Não informado'].includes(status)
+          (['Em planejamento', 'Não iniciado'].includes(status)
             ? 'Planejamento'
             : ''))
     ) ||
-    b.stages[0]
+    'Ainda não definido'
   );
 };
 obraCard = function (p, r, b) {

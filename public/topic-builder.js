@@ -161,7 +161,7 @@ function topicVisuals(p, rs, scope) {
     ks = d.kpis.filter((k) => k.visible !== false),
     cs = d.charts.filter((c) => c.visible !== false);
   if (!ks.length && !cs.length) return '';
-  return `<section class="topic-custom-visuals visual-dashboard layout-${d.layout || 'executive'}"><div class="section-kicker">Indicadores e gráficos desta aba</div>${ks.length ? `<div class="visual-metrics">${ks.map((k) => `<article class="visual-kpi" style="--kpi-color:${k.color || '#003856'}"><div class="visual-kpi-head"><span>${esc(k.title)}</span>${canEdit(p) ? `<button class="iconbtn" aria-label="Editar indicador ${esc(k.title)}" onclick="editMetric('${p.id}','${k.id}')">${icon('edit')}</button>` : ''}</div><strong>${formatVisual(metricResult(p, rs, k), k.format)}</strong><small>${esc(metricFoot(p, k))}</small></article>`).join('')}</div>` : ''}<div class="visual-board">${cs.map((c) => renderVisualCard(p, rs, c)).join('')}</div></section>`;
+  return `<section class="topic-custom-visuals visual-dashboard layout-${d.layout || 'executive'}"><div class="section-kicker">Indicadores e gráficos desta aba</div>${ks.length ? `<div class="visual-metrics">${ks.map((k) => `<article class="visual-kpi" ${typographyAttrs(k, '--kpi-color:' + esc(k.color || '#003856'))}><div class="visual-kpi-head"><span>${esc(k.title)}</span>${canEdit(p) ? `<button class="iconbtn" aria-label="Editar indicador ${esc(k.title)}" onclick="editMetric('${p.id}','${k.id}')">${icon('edit')}</button>` : ''}</div><strong>${formatVisual(metricResult(p, rs, k), k.format)}</strong><small>${esc(metricFoot(p, k))}</small></article>`).join('')}</div>` : ''}<div class="visual-board">${cs.map((c) => renderVisualCard(p, rs, c)).join('')}</div></section>`;
 }
 function compoundKey(row, fields) {
   return JSON.stringify(fields.map((f) => visualCategory(row[f])));
@@ -175,10 +175,10 @@ function composeValue(p, r, fields) {
     })
     .join(' · ');
 }
-function compositeGroups(p, rs, fields) {
+function compositeGroups(p, rs, fields, ignoreCase = false) {
   const map = new Map();
   for (const r of rs) {
-    const key = compoundKey(r, fields);
+    const key = ignoreCase ? JSON.stringify(fields.map((f) => visualCategory(r[f]).trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR'))) : compoundKey(r, fields);
     if (!map.has(key))
       map.set(key, {
         key,
@@ -198,7 +198,7 @@ function fieldCell(p, r, f) {
 function groupedTopicView(p, rs, c, scope) {
   const fields = c.fields.map((id) => p.fields.find((f) => f.id === id)).filter(Boolean),
     groups = c.groups.length
-      ? compositeGroups(p, rs, c.groups)
+      ? compositeGroups(p, rs, c.groups, scope === 'pipeline')
       : [{ key: 'all', label: 'Todos os registros', rows: rs, values: {} }];
   if (c.view === 'board')
     return `<div class="topic-board">${groups
@@ -260,8 +260,12 @@ function groupedTopicView(p, rs, c, scope) {
     .join('');
 }
 function topicPage(p, rs, scope, original) {
-  const c = topicConfig(p, scope),
-    body =
+  const c = topicConfig(p, scope);
+  if (scope === 'pipeline' && pipelineDisplayField && pipelineChoices(p).some((f) => f.id === pipelineDisplayField)) {
+    c.view = 'board';
+    c.groups = [pipelineDisplayField];
+  }
+  const body =
       c.view === 'empty'
         ? empty(
             'Monte seu BI nesta aba',
@@ -284,7 +288,8 @@ biOverview = function (p, rs) {
 };
 const beforeTopicPipeline = biPipeline;
 biPipeline = function (p, rs) {
-  return topicPage(p, rs, 'pipeline', () => beforeTopicPipeline(p, rs));
+  const selected = pipelineChoices(p).find((f) => f.id === pipelineDisplayField) || pipelineField(p);
+  return `<div class="workflow-toolbar"><label>Visualizar Kanban por <select aria-label="Visualizar pipeline por Status ou Macroetapa" onchange="setPipelineField('${esc(p.id)}',this.value)">${pipelineChoices(p).map((f) => `<option value="${esc(f.id)}" ${selected?.id === f.id ? 'selected' : ''}>${esc(f.name)}</option>`).join('')}</select></label></div>` + topicPage(p, rs, 'pipeline', () => beforeTopicPipeline(p, rs));
 };
 const beforeTopicPriorities = biPriorities;
 biPriorities = function (p, rs) {

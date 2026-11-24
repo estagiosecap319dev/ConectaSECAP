@@ -13,6 +13,9 @@ function workflowSettings() {
       colors: {},
       positions: {},
     });
+  for (const board of s.boards) {
+    if (!board.stages.includes('Ainda não definido')) board.stages.push('Ainda não definido');
+  }
   return s;
 }
 function activeBoard() {
@@ -60,11 +63,11 @@ const OBRA_STAGE_FALLBACK = {
   Paralisado: 'Em atenção',
 };
 function obraStatusKey(p) {
-  return fieldKey(p, 'status') || 'status';
+  return fieldKey(p, 'status') || p.fields.find((f) =>
+    ['status', 'statusdoprojeto', 'statusdaobra', 'situacao'].includes(importHeaderKey(f.name)))?.id || 'status';
 }
 function obraStatus(r, p) {
-  const v = r[obraStatusKey(p)];
-  return String(v != null && v !== '' ? v : r.status || '');
+  return workStatusSource(r, p).value;
 }
 // As etapas do quadro são só a organização visual de cada usuário: não têm relação com o
 // status da obra. A posição de cada obra fica salva neste navegador, por usuário e por quadro.

@@ -206,13 +206,21 @@ render = function () {
 };
 function biField(p, semantic) {
   const id = p.biMapping?.[semantic] ?? semanticDefaults[semantic];
-  return p.fields.find((f) => f.id === id);
+  const field = p.fields.find((f) => f.id === id);
+  if (['deadline', 'startDate'].includes(semantic)) {
+    const mapped = p.biMapping?.[semantic];
+    if (mapped && field && (p.records || []).some((r) => spreadsheetDate(r[field.id]))) return field;
+    const inferred = biDateField(p, semantic);
+    if (inferred && (!field || !(p.records || []).some((r) => spreadsheetDate(r[field.id])))) return inferred;
+  }
+  return field;
 }
 function fieldKey(p, semantic) {
   return biField(p, semantic)?.id || '';
 }
 function val(r, p, s) {
-  return r[fieldKey(p, s)];
+  const value = r[fieldKey(p, s)];
+  return ['deadline', 'startDate'].includes(s) ? spreadsheetDate(value) : value;
 }
 function numberOrNull(v) {
   return v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v);
@@ -449,10 +457,16 @@ function biCustomCharts(p, rs) {
       : ''
   }${dimensions.length ? `<div class="chart-grid">${dimensions.map((f) => chartPanel(esc(f.name), 'Distribuição dos valores cadastrados', groupsChart(p, rs, f))).join('')}</div>` : ''}`;
 }
+function pipelineChoices(p) {
+  const keys = [fieldKey(p, 'status'), fieldKey(p, 'stage'), 'status', 'etapa'];
+  return p.fields.filter((f) => keys.includes(f.id) ||
+    ['status', 'statusdoprojeto', 'statusdaobra', 'macroetapa', 'etapa'].includes(importHeaderKey(f.name)));
+}
 function pipelineField(p) {
   return (
     p.fields.find((f) => f.id === pipelineDisplayField) ||
     p.fields.find((f) => f.id === p.biPipelineField) ||
+    pipelineChoices(p).find((f) => ['macroetapa', 'etapa'].includes(importHeaderKey(f.name))) ||
     biField(p, 'stage') ||
     biField(p, 'status') ||
     p.fields.find((f) => f.type === 'select')
@@ -508,14 +522,14 @@ function biPriorities(p, rs) {
 }
 function biDeadlineList(p, rs, limit = 99) {
   const f = biField(p, 'deadline'),
-    withDates = f ? rs.filter((r) => r[f.id]).sort((a, b) => a[f.id].localeCompare(b[f.id])) : [];
+    withDates = f ? rs.map((r) => ({...r, [f.id]: spreadsheetDate(r[f.id])})).filter((r) => r[f.id]).sort((a, b) => a[f.id].localeCompare(b[f.id])) : [];
   return (
     withDates
       .slice(0, limit)
       .map((r) => {
         const d = r[f.id],
           dt = new Date(d + 'T12:00:00');
-        return `<button class="timeline-row" style="text-align:left;width:100%" onclick="editRecord('${p.id}','${r.id}')"><span class="timeline-date"><strong>${dt.getDate()}</strong><small>${dt.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</small></span><div><h3>${esc(recordTitle(r, p))}</h3><p>${esc(val(r, p, 'owner') || 'Sem responsável')} · ${esc(f.name)}</p></div><span class="badge ${overdue(r, p) ? 'red' : isFinished(r, p) ? 'green' : ''}">${overdue(r, p) ? 'Vencido' : isFinished(r, p) ? 'Concluído' : date(d)}</span></button>`;
+        return `<button class="timeline-row" style="text-align:left;width:100%" onclick="editRecord('${p.id}','${r.id}')"><span class="timeline-date"><strong>${dt.getDate()}</strong><small>${dt.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}</small></span><div><h3>${esc(recordTitle(r, p))}</h3><p>${esc(val(r, p, 'owner') || 'Sem responsável')} · ${esc(f.name)}${biDateField(p, 'startDate') && spreadsheetDate(r[biDateField(p, 'startDate').id]) ? ' · Início da vigência: ' + esc(date(spreadsheetDate(r[biDateField(p, 'startDate').id]))) : ''}</p></div><span class="badge ${overdue(r, p) ? 'red' : isFinished(r, p) ? 'green' : ''}">${overdue(r, p) ? 'Vencido' : isFinished(r, p) ? 'Concluído' : date(d)}</span></button>`;
       })
       .join('') ||
     empty('Nenhum prazo informado', 'Associe um campo de data e preencha os registros no projeto.')
@@ -523,12 +537,13 @@ function biDeadlineList(p, rs, limit = 99) {
 }
 function biSchedule(p, rs) {
   const f = biField(p, 'deadline'),
-    dated = f ? rs.filter((r) => r[f.id]) : [],
+    normalized = f ? rs.map((r) => ({...r, [f.id]: spreadsheetDate(r[f.id])})) : rs,
+    dated = f ? normalized.filter((r) => r[f.id]) : [],
     next30 = dated.filter(
       (r) => !isFinished(r, p) && daysLeft(r[f.id]) >= 0 && daysLeft(r[f.id]) <= 30
     ),
     noDate = f ? rs.length - dated.length : null;
-  return `<div class="stats">${biMetric('PRAZOS INFORMADOS', dated.length, `${rs.length} registros na análise`, 'calendar')}${biMetric('PRAZOS VENCIDOS', dated.filter((r) => overdue(r, p)).length, 'Entregas ainda não concluídas', 'clock', '#c93636')}${biMetric('VENCEM EM 30 DIAS', next30.length, 'Próximas entregas da carteira', 'calendar', '#f37021')}${biMetric('SEM DATA', noDate === null ? '—' : noDate, 'Completar o cronograma', 'edit', '#97b0bf')}</div><div class="chart-grid wide">${chartPanel('Linha de entregas', 'Registros organizados pela data de encerramento', biDeadlineList(p, rs))}${chartPanel(
+  return `<div class="stats">${biMetric('PRAZOS INFORMADOS', dated.length, `${rs.length} registros na análise`, 'calendar')}${biMetric('PRAZOS VENCIDOS', dated.filter((r) => overdue(r, p)).length, 'Entregas ainda não concluídas', 'clock', '#c93636')}${biMetric('VENCEM EM 30 DIAS', next30.length, 'Próximas entregas da carteira', 'calendar', '#f37021')}${biMetric('SEM DATA', noDate === null ? '—' : noDate, 'Completar o cronograma', 'edit', '#97b0bf')}</div><div class="chart-grid wide">${chartPanel('Linha de entregas', 'Registros organizados pela data de encerramento', biDeadlineList(p, normalized))}${chartPanel(
     'Janelas de acompanhamento',
     'Prazos futuros de registros não concluídos',
     `<div class="calendar-bars">${[
@@ -1058,7 +1073,7 @@ admin = function () {
   adminSection = 'access';
   return (
     backLink() +
-    `<section class="admin-institution"><img src="logo-negative.png" alt="Prefeitura de Goiânia"><div><div class="institution-label">PREFEITURA DE GOIÂNIA · SECAP<br>${esc(db.portalSettings.department.replace(/^Secretaria Municipal de /, ''))}</div><h1>Administração</h1><p>Aprove ou recuse o acesso ao sistema de quem se cadastrou no SECAP.</p></div><div class="admin-badge">${icon('shield')}Administrador</div></section>` +
+    `<section class="admin-institution"><div><div class="institution-label">PREFEITURA DE GOIÂNIA · SECAP<br>${esc(db.portalSettings.department.replace(/^Secretaria Municipal de /, ''))}</div><h1>Administração</h1><p>Aprove ou recuse o acesso ao sistema de quem se cadastrou no SECAP.</p></div><div class="admin-badge">${icon('shield')}Administrador</div></section>` +
     adminSolicitacoes() +
     adminAccess()
   );
@@ -1196,7 +1211,7 @@ admin = function () {
   return (
     backLink() +
     `<section class="admin-institution">
-      <img src="logo-negative.png" alt="Prefeitura de Goiânia">
+      
       <div>
         <div class="institution-label">PREFEITURA DE GOIÂNIA · SECAP<br>${esc(db.portalSettings.department.replace(/^Secretaria Municipal de /, ''))}</div>
         <h1>Administração</h1>

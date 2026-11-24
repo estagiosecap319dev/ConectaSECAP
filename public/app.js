@@ -352,7 +352,7 @@ function login() {
     : registering
       ? `<form onsubmit="event.preventDefault();submitRegistration(this)"><div class="field"><label>Nome completo *</label><input name="name" required maxlength="120" autocomplete="name"></div><div class="field"><label>E-mail *</label><input name="email" type="email" required maxlength="254" autocomplete="email"></div><div class="field"><label>Senha *</label><input name="password" type="password" required minlength="12" maxlength="512" autocomplete="new-password"><small>Mínimo de 12 caracteres.</small></div><div class="field"><label>Cargo *</label><input name="job_title" required maxlength="120" placeholder="Ex.: Analista de projetos"></div><button class="btn primary" type="submit">Enviar solicitação</button><p id="registerMessage" role="status"></p></form><button class="login-create" type="button" onclick="showLogin()">Voltar para entrar</button>`
       : `<form onsubmit="event.preventDefault();authenticate(this)"><div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="username"></div><div class="field"><label>Senha</label><input name="password" type="password" required minlength="12" autocomplete="${window.SECAP_SETUP ? 'new-password' : 'current-password'}"><small>Mínimo de 12 caracteres.</small></div><button class="btn primary" type="submit">${window.SECAP_SETUP ? 'Criar administrador' : 'Entrar'}</button><p id="authMessage" role="status"></p></form>${window.SECAP_SETUP ? '' : `<div class="login-divider"><span>ou</span></div><button class="btn google-login" type="button" onclick="googleLogin()"><span class="google-g">G</span> Continuar com Google</button><button class="login-create" type="button" onclick="showRegister()">Criar conta</button><p id="socialAuthMessage" class="social-auth-message" role="status"></p>`}`;
-  return `<div class="stripe"></div><div class="login"><section class="loginart"><img class="loginart-logo" src="logo-negative.png" alt="Prefeitura de Goiânia"><h1>Projetos que avançam.<br>Uma cidade que transforma.</h1><p>Planejamento, acompanhamento e decisões conectados em um só lugar.</p></section><section class="loginform"><div class="eyebrow">PORTAL DE PROJETOS</div><h1>${heading}</h1><p class="subtitle">${subtitle}</p>${accessNoticeMarkup()}${formMarkup}</section></div>`;
+  return `<div class="stripe"></div><div class="login"><section class="loginart"><img class="loginart-logo" src="marca-goiania-horizontal.svg" alt="Prefeitura de Goiânia"><h1>Projetos que avançam.<br>Uma cidade que transforma.</h1><p>Planejamento, acompanhamento e decisões conectados em um só lugar.</p></section><section class="loginform"><div class="eyebrow">PORTAL DE PROJETOS</div><h1>${heading}</h1><p class="subtitle">${subtitle}</p>${accessNoticeMarkup()}${formMarkup}</section></div>`;
 }
 
 function showRegister() {
@@ -528,7 +528,7 @@ function render() {
         : u.role === 'Administrador' || u.tabs.includes(n));
   if (!allowed(tab)) tab = 'profile';
   $('#app').innerHTML =
-    `<div class="stripe"></div><div class="shell"><aside class="sidebar" id="sidebar"><div class="brand"><img class="brand-logo" src="logo-negative.png" alt="Prefeitura de Goiânia"></div><div class="navlabel">GESTÃO E ACOMPANHAMENTO</div>${navs
+    `<div class="stripe"></div><div class="shell"><aside class="sidebar" id="sidebar"><div class="brand"><img class="brand-logo" src="marca-goiania-horizontal.svg" alt="Prefeitura de Goiânia"></div><div class="navlabel">GESTÃO E ACOMPANHAMENTO</div>${navs
       .filter((n) => managementNavs.includes(n[0]))
       .filter((n) => allowed(n[0]))
       .map(nav)
@@ -4106,21 +4106,8 @@ function setImportMode(mode) {
     .forEach((b, i) => b.classList.toggle('active', (mode === 'local' ? 0 : 1) === i));
 }
 // Função auxiliar para converter DD/MM/AAAA para YYYY-MM-DD
-function parseBrazilianDate(dateStr) {
-  if (!dateStr) return '';
-  const str = String(dateStr).trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  const parts = str.split(/[\/\.-]/);
-  if (parts.length === 3) {
-    let [d, m, y] = parts;
-    if (y.length === 2) y = '20' + y;
-    if (d.length === 1) d = '0' + d;
-    if (m.length === 1) m = '0' + m;
-    if (y.length === 4 && Number(m) <= 12 && Number(d) <= 31) {
-      return `${y}-${m}-${d}`;
-    }
-  }
-  return '';
+function parseBrazilianDate(value) {
+  return spreadsheetDate(value);
 }
 
 function parseCSV(text) {
@@ -4324,12 +4311,15 @@ async function runImport() {
     $('#importProgressText').textContent = 'Validando e organizando registros…';
     if (!rows || rows.length < 2) throw Error('A planilha não contém registros para importar.');
 
-    const rawHeaders = rows.shift().map((h) => h.trim());
+    while (rows.length && !rows[0].some((v) => String(v ?? '').trim())) rows.shift();
+    if (rows.length < 2) throw Error('A planilha não contém registros para importar.');
+    const rawHeaders = rows.shift().map((h) => String(h ?? '').trim());
     if (!rawHeaders.length) throw Error('Planilha sem cabeçalhos válidos.');
 
     // Mapeamento de aliases padrão para alinhamento com campos nativos
     const sysAliases = {
       nome: [
+        'nome',
         'nomedaobra',
         'nomedoprojeto',
         'obra',
@@ -4338,7 +4328,7 @@ async function runImport() {
         'descricao',
         'denominacao',
       ],
-      status: ['status', 'situacao', 'posicao', 'fase'],
+      status: ['status', 'statusdoprojeto', 'statusdaobra', 'situacao', 'posicao', 'fase'],
       etapa: ['etapa', 'macroetapa'],
       valor: [
         'valor',
@@ -4381,7 +4371,7 @@ async function runImport() {
       // Se não existir o campo no projeto, cria um novo campo automaticamente com base nos dados da coluna
       if (!existingField) {
         const samples = rows.map((r) => r[index]);
-        const detectedType = detectFieldType(samples);
+        const detectedType = /^(inicio|fim|termino)(da)?vigencia$/.test(normHeader) ? 'date' : detectFieldType(samples);
         const newFieldId = 'f_' + normHeader + '_' + uid().slice(0, 4);
 
         existingField = {
@@ -4402,12 +4392,8 @@ async function runImport() {
     });
 
     // 2. Determinar qual coluna é a principal ("Nome da obra")
-    let nameMapping =
-      fieldMapping.find((m) => m.fieldId === 'nome') ||
-      fieldMapping.find((m) => sysAliases.nome.includes(m.headerNorm)) ||
-      fieldMapping.find(
-        (m) => !['id', 'item', 'n', 'seq', 'nr'].includes(m.headerNorm) && m.fieldType === 'text'
-      );
+    const nameMapping = importNameColumn(fieldMapping, rows);
+    if (!nameMapping) throw Error('Não foi possível identificar uma coluna descritiva para o nome da obra. Inclua um cabeçalho Nome ou Obra.');
 
     const imported = [];
     let skippedRows = 0;
@@ -4444,15 +4430,9 @@ async function runImport() {
         record[fieldId] = rawVal;
       }
 
-      // Linhas sem nome identificável não devem ser importadas como obras.
-      if (nameMapping && record[nameMapping.fieldId] !== undefined) {
-        record.nome = String(record[nameMapping.fieldId]).trim();
-      } else {
-        const textVal = Object.entries(record).find(
-          ([k, v]) => k !== 'id' && typeof v === 'string' && v.trim() && !/^\d+$/.test(v)
-        );
-        record.nome = textVal ? String(textVal[1]).trim() : '';
-      }
+      // Não usa outra coluna para inventar nome em linhas com título vazio.
+      record.nome = String(cells[nameMapping.colIndex] ?? '').trim();
+      if (!String(record.status ?? '').trim()) record.status = 'Ainda não definido';
 
       if (record.nome) {
         imported.push(record);
