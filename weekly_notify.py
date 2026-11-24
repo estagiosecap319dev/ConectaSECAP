@@ -164,17 +164,26 @@ def deliver(cfg, msg: EmailMessage) -> str:
         mode = 'ssl'
     elif mode in ('tls', 'start_tls', 'start-tls', ''):
         mode = 'starttls'
+    host = str(smtp['host']).strip()
     ctx = ssl.create_default_context()
-    if mode == 'ssl':
-        server = smtplib.SMTP_SSL(smtp['host'], port, context=ctx, timeout=30)
-    else:
-        server = smtplib.SMTP(smtp['host'], port, timeout=30)
-    with server:
-        if mode == 'starttls':
-            server.starttls(context=ctx)
-        if smtp.get('usuario'):
-            server.login(smtp['usuario'], smtp.get('senha', ''))
-        server.send_message(msg)
+    stage = 'conexão'
+    try:
+        if mode == 'ssl':
+            server = smtplib.SMTP_SSL(host, port, context=ctx, timeout=30)
+        else:
+            server = smtplib.SMTP(host, port, timeout=30)
+        with server:
+            if mode == 'starttls':
+                stage = 'starttls'
+                server.starttls(context=ctx)
+            if smtp.get('usuario'):
+                stage = 'login'
+                server.login(str(smtp['usuario']).strip(), smtp.get('senha', ''))
+            stage = 'envio'
+            server.send_message(msg)
+    except Exception as exc:
+        # Diz onde falhou (sem a senha) para facilitar o diagnóstico na Auditoria/log.
+        raise RuntimeError(f'{exc} [etapa: {stage}; servidor {host}:{port}; modo {mode}]') from exc
     return 'enviado'
 
 
