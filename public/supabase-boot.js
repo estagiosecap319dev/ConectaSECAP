@@ -32,6 +32,7 @@ const APP_SCRIPTS = [
   'work-responsible-monitor.js',
   'saving-indicator.js',
   'sidebar-resize.js',
+  'record-field-search.js',
 ];
 
 function showBootError(message) {

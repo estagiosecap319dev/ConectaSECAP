@@ -981,3 +981,72 @@ body.menu-collapsed .sidebar-resizer {
 @media (max-width: 720px) {
   .sidebar-resizer { display: none; }
 }
+
+/* ---- Busca de campos na janela "Editar dados" (record-field-search.js) ---- */
+.record-field-search {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid #dbe5eb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(0, 56, 86, 0.06);
+}
+.record-field-search-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  background: #64748b;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.record-field-search input {
+  flex: 1 1 260px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+}
+.record-field-search input:focus {
+  outline: 2px solid #f37021;
+  outline-offset: 1px;
+  border-color: #f37021;
+}
+.record-field-search-clear {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.record-field-search-clear:hover { background: #e2e8f0; }
+.record-field-search-status {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 12px;
+}
+#recordForm .field[hidden],
+#recordForm .edit-section-group[hidden] {
+  display: none !important;
+}
+.record-field-search .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
