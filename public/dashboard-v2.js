@@ -445,7 +445,8 @@
               type: 'value',
               axisLabel: {
                 formatter: function (v) {
-                  return v >= 1e6 ? v / 1e6 + ' mi' : v >= 1e3 ? v / 1e3 + ' mil' : v;
+                  const f = (x) => x.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+                  return v >= 1e9 ? f(v / 1e9) + ' bi' : v >= 1e6 ? f(v / 1e6) + ' mi' : v >= 1e3 ? f(v / 1e3) + ' mil' : v;
                 },
                 color: '#66737c',
               },

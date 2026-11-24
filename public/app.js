@@ -58,9 +58,11 @@ const uid = () =>
       maximumFractionDigits: 0,
     }).format(Number(n) || 0),
   compact = (n) =>
-    n >= 1e6
-      ? `R$ ${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
-      : money(n),
+    Math.abs(n) >= 1e9
+      ? `R$ ${(n / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 2 })} bi`
+      : Math.abs(n) >= 1e6
+        ? `R$ ${(n / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+        : money(n),
   date = (d) => (d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : 'Sem prazo'),
   today = () => new Date().toLocaleDateString('en-CA'),
   baseFields = () => [
