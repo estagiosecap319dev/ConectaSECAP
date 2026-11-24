@@ -984,9 +984,8 @@ body.menu-collapsed .sidebar-resizer {
 
 /* ---- Busca de campos na janela "Editar dados" (record-field-search.js) ---- */
 .record-field-search {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  /* Fica no topo da janela, no lugar dela: não acompanha a rolagem. */
+  position: static;
   display: flex;
   align-items: center;
   gap: 10px;
