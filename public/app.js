@@ -183,6 +183,11 @@ let records = () =>
 const avg = (rs) =>
   Math.round(rs.reduce((s, r) => s + (Number(r.progresso) || 0), 0) / (rs.length || 1));
 const sum = (rs, f) => rs.reduce((s, r) => s + (Number(r[f]) || 0), 0);
+// Situação normalizada ("04 – Concluído" -> "Concluído"); canonicalStatus vem de status-presentation.js.
+const statusIs = (r, label) =>
+  (typeof canonicalStatus === 'function' ? canonicalStatus(r.status) : r.status) === label;
+// Investimento: obras canceladas não entram na soma (mesmo critério do Painel executivo).
+const investRows = (rs) => rs.filter((r) => !statusIs(r, 'Cancelado'));
 const tone = (s) =>
   s === 'Concluído'
     ? 'green'
@@ -681,14 +686,14 @@ function stats(rs) {
     "go('projects')"
   )}${stat(
     'OBRAS EM ANDAMENTO',
-    rs.filter((r) => r.status === 'Em andamento').length,
+    rs.filter((r) => statusIs(r, 'Em andamento')).length,
     `${rs.length} obras na carteira`,
     'kanban',
     "filterStatus='Em andamento';tab='kanban';render()"
   )}${stat(
     'INVESTIMENTO PREVISTO',
-    compact(sum(rs, 'valor')),
-    `${compact(sum(rs, 'executado'))} executados`,
+    compact(sum(investRows(rs), 'valor')),
+    `${compact(sum(investRows(rs), 'executado'))} executados · sem canceladas`,
     'money',
     "go('bi')"
   )}${stat(
@@ -1987,12 +1992,14 @@ function projectView() {
       'chart'
     )}${stat(
       'INVESTIMENTO',
-      rs.some((r) => r.valor !== '' && r.valor != null) ? compact(sum(rs, 'valor')) : '—',
-      'Valor previsto nas obras',
+      investRows(rs).some((r) => r.valor !== '' && r.valor != null)
+        ? compact(sum(investRows(rs), 'valor'))
+        : '—',
+      'Valor previsto nas obras (sem canceladas)',
       'money'
     )}${stat(
       'CONCLUÍDAS',
-      rs.filter((r) => r.status === 'Concluído').length,
+      rs.filter((r) => statusIs(r, 'Concluído')).length,
       'Entregas registradas',
       'check'
     )}</div><div class="filters"><div class="search">${icon(
