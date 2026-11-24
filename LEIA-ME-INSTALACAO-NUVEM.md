@@ -43,6 +43,7 @@ Execute cada arquivo inteiro, **nesta ordem**, no SQL Editor do projeto (ou com 
 | 33 | `supabase/security/user_notifications.sql` |
 | 34 | `supabase/security/work_responsibles_manual.sql` (Responsável pela próxima ação preenchido à mão) |
 | 35 | `supabase/security/no_retry_conflicts.sql` (evita repetição automática de conflitos pelo PostgREST) |
+| 36 | `supabase/security/performance_advisor.sql` (regras de acesso otimizadas e índices de chaves estrangeiras) |
 
 ### NÃO executar num banco novo
 
