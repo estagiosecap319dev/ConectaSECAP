@@ -4341,7 +4341,7 @@ async function runImport() {
       executado: ['executado', 'valorexecutado', 'gasto', 'pago'],
       prazo: ['prazo', 'prazodeentrega', 'dataentrega', 'prazodaproximaprovidencia', 'previsao'],
       responsavel: ['responsavel', 'gestor', 'fiscal'],
-      progresso: ['progresso', 'avancofisico', 'avanco'],
+      progresso: ['progresso', 'avancofisico', 'avanco', 'execucao', 'percentualexecucao'],
       proxima: ['proxima', 'proximaprovidencia', 'providencia', 'acao'],
       orgao: ['orgao', 'secretaria', 'unidade'],
     };
