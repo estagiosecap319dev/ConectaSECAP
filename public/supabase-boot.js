@@ -33,6 +33,7 @@ const APP_SCRIPTS = [
   'saving-indicator.js',
   'sidebar-resize.js',
   'record-field-search.js',
+  'weekly-summary.js',
 ];
 
 function showBootError(message) {
