@@ -1,10 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/weekly-notify.py": { "includeFiles": "{weekly_notify,sheet_sync}.py", "maxDuration": 60 }
+    "api/weekly-notify.py": { "includeFiles": "{weekly_notify,sheet_sync}.py", "maxDuration": 60 },
+    "api/access-request-notify.py": { "includeFiles": "{access_request_notify,weekly_notify,sheet_sync}.py", "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/weekly-notify", "schedule": "0 11 * * 1" }
+    { "path": "/api/weekly-notify", "schedule": "0 11 * * 1" },
+    { "path": "/api/access-request-notify", "schedule": "0 12 * * *" }
   ],
   "headers": [
     {

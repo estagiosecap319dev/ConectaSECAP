@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 import sheet_sync
 import weekly_notify
+import access_request_notify
 
 ROOT = Path(__file__).resolve().parent
 PUBLIC_DIR = ROOT / 'public'
@@ -82,5 +83,7 @@ if __name__ == '__main__':
         print('Sincronia com a planilha Google: ativa (status em /api/sheet-sync/status)')
     if weekly_notify.start_background():
         print('Notificação semanal por e-mail: agendada')
+    if access_request_notify.start_background():
+        print('Aviso de solicitação de acesso por e-mail: ativo')
     print('Pressione Ctrl+C para encerrar.', flush=True)
     ThreadingHTTPServer((host, port), Handler).serve_forever()
