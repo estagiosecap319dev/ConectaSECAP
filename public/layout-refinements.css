@@ -909,3 +909,27 @@
 @media (max-width: 600px) {
   .save-indicator { right: 16px; bottom: 16px; }
 }
+
+/* ---- Aviso fixo quando o salvamento foi bloqueado por conflito (server-client.js) ---- */
+.save-blocked-banner {
+  position: fixed;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  z-index: 2147482500;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 12px 14px 12px 18px;
+  border-radius: 12px;
+  background: #fff4e5;
+  border: 1px solid #f3b679;
+  color: #6b3205;
+  font: 500 13px/1.4 Poppins, system-ui, sans-serif;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+.save-blocked-banner .btn { flex: 0 0 auto; }
+@media (max-width: 600px) {
+  .save-blocked-banner { flex-direction: column; align-items: stretch; }
+}
