@@ -49,20 +49,20 @@ def build_message(cfg, admin_email: str, requests: list) -> EmailMessage:
     portal = str(cfg.get('portal_url') or '').rstrip('/')
     n = len(requests)
     msg = EmailMessage()
-    msg['Subject'] = (f'Nova solicitação de acesso ao Portal SECAP: {requests[0]["name"]}' if n == 1
-                      else f'{n} novas solicitações de acesso ao Portal SECAP')
-    msg['From'] = formataddr((smtp.get('nome_remetente') or 'Portal SECAP', sender))
+    msg['Subject'] = (f'Nova solicitação de acesso ao Conecta-SECAP: {requests[0]["name"]}' if n == 1
+                      else f'{n} novas solicitações de acesso ao Conecta-SECAP')
+    msg['From'] = formataddr((smtp.get('nome_remetente') or 'Conecta-SECAP', sender))
     msg['To'] = admin_email
     msg['Message-ID'] = make_msgid(domain=sender.split('@')[-1] or 'localhost')
 
-    intro = ('Uma pessoa pediu acesso ao Portal SECAP e aguarda sua decisão.' if n == 1
-             else f'{n} pessoas pediram acesso ao Portal SECAP e aguardam sua decisão.')
+    intro = ('Uma pessoa pediu acesso ao Conecta-SECAP e aguarda sua decisão.' if n == 1
+             else f'{n} pessoas pediram acesso ao Conecta-SECAP e aguardam sua decisão.')
     where = 'Para aprovar ou recusar, entre no portal e abra Administração → Acesso ao sistema.'
     lines = [intro, '']
     for r in requests:
         lines += [f"• {r['name']} <{r['email']}>", f"  Cargo: {r.get('jobTitle') or 'Não informado'}",
                   f"  Pedido em: {br_datetime(r.get('createdAt'))}", '']
-    lines += [where] + ([f'Portal: {portal}'] if portal else []) + ['', 'Mensagem automática do Portal SECAP.']
+    lines += [where] + ([f'Portal: {portal}'] if portal else []) + ['', 'Mensagem automática do Conecta-SECAP.']
     msg.set_content('\n'.join(lines))
 
     rows = ''.join(
