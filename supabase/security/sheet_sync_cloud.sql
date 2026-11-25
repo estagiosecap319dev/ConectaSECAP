@@ -4,7 +4,10 @@
 --    no banco, em public.secap_sheet_sync_state, e não mais só no arquivo
 --    data/sheet-sync-state.json do computador. Assim a Vercel e o portal local usam a mesma base.
 -- 2. Uma trava (locked_until) impede que dois lugares sincronizem ao mesmo tempo.
--- 3. O agendador do Supabase (pg_cron) chama /api/sheet-sync a cada 2 minutos via pg_net.
+-- 3. O agendador do Supabase (pg_cron) chama /api/sheet-sync a cada 5 minutos via pg_net.
+-- 4. Conferência rápida: antes de baixar as obras, o servidor compara um resumo (hash) da
+--    planilha e das obras com o da última sincronia. Sem mudanças, o ciclo termina ali
+--    (poucos bytes trafegados, nada regravado).
 --    Endereço e segredo ficam no Vault ('secap_sheet_sync_url' e 'secap_sheet_sync_secret');
 --    sem eles, o agendamento não faz nada.
 --
@@ -21,6 +24,9 @@ create table if not exists public.secap_sheet_sync_state (
   locked_by text not null default '',
   updated_at timestamptz not null default now()
 );
+alter table public.secap_sheet_sync_state
+  add column if not exists sheet_hash text not null default '',
+  add column if not exists portal_hash text not null default '';
 alter table public.secap_sheet_sync_state enable row level security;
 revoke all on public.secap_sheet_sync_state from public, anon, authenticated;
 
@@ -72,6 +78,48 @@ begin
   return true;
 end $$;
 
+-- Resumo atual das obras do projeto (hash calculado aqui; só 32 caracteres saem do banco)
+-- + resumos guardados na última sincronia.
+create or replace function public.secap_sheet_sync_fingerprint(p_key text, p_project text)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_portal text;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Uso restrito ao servidor do portal.' using errcode = '42501';
+  end if;
+  select md5(coalesce((
+           select string_agg(md5(o::text), '' order by o.id)
+           from public.obras o where o.project_id = p_project), '')
+         || coalesce((
+           select md5(x.p::text)
+           from public.app_state a, jsonb_array_elements(a.body->'projects') x(p)
+           where a.id = 1 and x.p->>'id' = p_project limit 1), ''))
+    into v_portal;
+  return (select jsonb_build_object(
+            'portal', v_portal,
+            'storedSheet', coalesce(s.sheet_hash, ''),
+            'storedPortal', coalesce(s.portal_hash, ''),
+            'hasBase', coalesce(s.body ? 'base' and jsonb_typeof(s.body->'base') = 'object', false))
+          from (select 1) one left join public.secap_sheet_sync_state s on s.key = p_key);
+end $$;
+
+create or replace function public.secap_sheet_sync_fingerprint_put(p_key text, p_sheet text, p_portal text)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Uso restrito ao servidor do portal.' using errcode = '42501';
+  end if;
+  update public.secap_sheet_sync_state
+     set sheet_hash = left(coalesce(p_sheet, ''), 128), portal_hash = left(coalesce(p_portal, ''), 128)
+   where key = p_key;
+  return true;
+end $$;
+
+revoke all on function public.secap_sheet_sync_fingerprint(text, text) from public, anon, authenticated;
+revoke all on function public.secap_sheet_sync_fingerprint_put(text, text, text) from public, anon, authenticated;
+grant execute on function public.secap_sheet_sync_fingerprint(text, text) to service_role;
+grant execute on function public.secap_sheet_sync_fingerprint_put(text, text, text) to service_role;
+
 revoke all on function public.secap_sheet_sync_state_get(text) from public, anon, authenticated;
 revoke all on function public.secap_sheet_sync_state_put(text, jsonb) from public, anon, authenticated;
 revoke all on function public.secap_sheet_sync_lock(text, text, integer) from public, anon, authenticated;
@@ -101,7 +149,7 @@ end $$;
 revoke all on function public.secap_sheet_sync_ping() from public, anon, authenticated;
 
 select cron.unschedule(jobid) from cron.job where jobname = 'secap-sheet-sync';
-select cron.schedule('secap-sheet-sync', '*/2 * * * *', 'select public.secap_sheet_sync_ping()');
+select cron.schedule('secap-sheet-sync', '*/5 * * * *', 'select public.secap_sheet_sync_ping()');
 
 notify pgrst, 'reload schema';
 commit;

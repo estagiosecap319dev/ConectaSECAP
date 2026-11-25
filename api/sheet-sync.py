@@ -1,6 +1,6 @@
 """Sincronia com a planilha Google na Vercel.
 
-Chamado a cada 2 minutos pelo agendador do Supabase (pg_cron + pg_net, ver
+Chamado a cada 5 minutos pelo agendador do Supabase (pg_cron + pg_net, ver
 supabase/security/sheet_sync_cloud.sql). Só aceita
 Authorization: Bearer <SHEET_SYNC_SECRET> ou Bearer <CRON_SECRET>.
 

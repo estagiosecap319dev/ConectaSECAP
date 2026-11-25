@@ -24,6 +24,7 @@ Uso manual:   python sheet_sync.py --uma-vez        (executa um ciclo)
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
 import re
@@ -305,10 +306,15 @@ class GoogleSheets:
         return [s['properties']['title'] for s in meta.get('sheets', [])]
 
     def read(self, ranges, render):
+        memo_key = (tuple(ranges), render)
+        memo = self.__dict__.setdefault('_memo', {})
+        if memo_key in memo:
+            return memo[memo_key]
         resp = self._call('GET', '/values:batchGet', {
             'ranges': ranges, 'valueRenderOption': render,
             'dateTimeRenderOption': 'SERIAL_NUMBER', 'majorDimension': 'ROWS'})
-        return [vr.get('values', []) for vr in resp.get('valueRanges', [])]
+        memo[memo_key] = [vr.get('values', []) for vr in resp.get('valueRanges', [])]
+        return memo[memo_key]
 
     def write_cells(self, data):
         if data:
@@ -641,14 +647,21 @@ class Cycle:
             self.report['modo'] = 'relatório (nada foi gravado)'
             return self.report
 
+        # Nada a gravar em lado nenhum e base igual: não regrava o estado (economiza banco).
+        if not (updates or inserts or cell_writes or appends) and not first and new_base == base \
+                and state.get('aba') == title:
+            self.report['modo'] = 'sincronia (sem mudanças)'
+            return self.report
+
         # 1) portal  2) base parcial  3) planilha  4) base final
         if updates or inserts:
             res = self.portal.apply(cfg['projeto_id'], list(updates.values()), inserts, f'Planilha Google · {title}')
             self.report['resultado_portal'] = res
-        save_state(cfg, self.portal, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
-                                      'aba': title, 'base': new_base})
-        self.sheets.write_cells(cell_writes)
-        self.sheets.append_rows(title, appends)
+        if cell_writes or appends:
+            save_state(cfg, self.portal, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
+                                          'aba': title, 'base': new_base})
+            self.sheets.write_cells(cell_writes)
+            self.sheets.append_rows(title, appends)
         for key, vals in pending_sheet.items():
             new_base.setdefault(key, {}).update(vals)
         save_state(cfg, self.portal, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
@@ -665,6 +678,27 @@ _lock = threading.Lock()
 
 
 LOCK_OWNER = ('vercel-' if os.environ.get('VERCEL') else 'local-') + uuid.uuid4().hex[:8]
+
+
+def quick_check(cfg, cycle):
+    """Resumo barato dos dois lados. Planilha: hash dos valores lidos do Google (não gasta o banco).
+    Portal: hash calculado no próprio banco (32 caracteres em vez de baixar todas as obras).
+    Devolve None quando não dá para conferir (aba não fixada ou banco sem a função)."""
+    title = str(cfg.get('aba') or '').strip()
+    if not title:
+        return None
+    try:
+        db = cycle.portal.rpc('secap_sheet_sync_fingerprint',
+                              {'p_key': state_key(cfg), 'p_project': cfg['projeto_id']}) or {}
+    except SyncError as exc:
+        if _db_state_missing(exc):
+            return None
+        raise
+    values = cycle.sheets.read([f"'{title}'"], 'UNFORMATTED_VALUE')[0]
+    sheet = hashlib.sha256(json.dumps(values, ensure_ascii=False, default=str).encode('utf-8')).hexdigest()
+    portal = db.get('portal') or ''
+    unchanged = bool(db.get('hasBase')) and sheet == db.get('storedSheet') and portal == db.get('storedPortal')
+    return {'sheet': sheet, 'portal': portal, 'unchanged': unchanged}
 
 
 def run_once(dry_run=False, sheets=None, portal=None):
@@ -685,7 +719,22 @@ def run_once(dry_run=False, sheets=None, portal=None):
                 if not _db_state_missing(exc):
                     raise
         try:
+            report = None
+            fp = None if dry_run else quick_check(cfg, cycle)
+            if fp and fp.get('unchanged'):
+                report = {'modo': 'sem mudanças (conferência rápida)', 'avisos': [], 'conflitos': [],
+                          'planilha_para_portal': 0, 'portal_para_planilha': 0, 'obras_criadas_no_portal': 0,
+                          'linhas_criadas_na_planilha': 0, 'rapida': True}
+                return report
             report = cycle.run()
+            if fp and not report.get('modo', '').startswith('relat'):
+                # Guarda o resumo lido ANTES do ciclo: se o próprio ciclo alterou algum lado,
+                # o próximo faz uma rodada completa (sem mudanças) e o resumo se estabiliza.
+                try:
+                    cycle.portal.rpc('secap_sheet_sync_fingerprint_put', {
+                        'p_key': key, 'p_sheet': fp['sheet'], 'p_portal': fp['portal']})
+                except SyncError:
+                    pass
         finally:
             if locked:
                 try:
