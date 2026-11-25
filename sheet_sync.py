@@ -90,7 +90,12 @@ class SyncError(Exception):
 
 def log(msg: str) -> None:
     line = f'[{dt.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}'
-    print('[planilha] ' + msg, flush=True)
+    try:
+        print('[planilha] ' + msg, flush=True)
+    except UnicodeEncodeError:
+        # Console do Windows (cp1252) não imprime "→": troca o caractere em vez de falhar o ciclo.
+        enc = getattr(sys.stdout, 'encoding', None) or 'ascii'
+        print(('[planilha] ' + msg).encode(enc, 'replace').decode(enc), flush=True)
     try:
         DATA_DIR.mkdir(exist_ok=True)
         with LOG_FILE.open('a', encoding='utf-8') as fh:
