@@ -1263,3 +1263,47 @@ body.menu-collapsed .sidebar-resizer {
 .discard-confirm-actions .btn.danger:hover {
   background: #9a3412;
 }
+
+/* BI/Painéis: barra de pesquisa igual à das pastas (lupa como bloco laranja à esquerda)
+   e um único contorno ao clicar, em vez da borda laranja + contorno azul em volta. */
+.bi-filters .search {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  min-height: 46px;
+}
+.bi-filters .search > svg {
+  flex: none;
+  box-sizing: content-box;
+  width: 18px;
+  height: auto;
+  padding: 0 14px;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--gyn-orange, #f37021);
+  color: var(--gyn-navy, #002f47);
+}
+.bi-filters .search input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px !important;
+}
+.bi-filters .search:focus-within {
+  outline: none !important;
+  border-color: var(--gyn-navy, #002f47) !important;
+  box-shadow: 0 0 0 3px rgba(243, 112, 33, 0.35) !important;
+}
+
+/* BI/Painéis: dentro da grade de contêineres, os blocos já têm espaço entre si;
+   as margens próprias da barra de filtros e das barrinhas do Pipeline abriam vãos vazios. */
+.page-container > .container-content > .bi-filters,
+.page-container > .container-content > .workflow-toolbar {
+  margin: 0 !important;
+}
+.page-container > .container-content > .workflow-toolbar {
+  min-height: 40px;
+  align-items: center;
+}
