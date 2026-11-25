@@ -523,6 +523,10 @@ class Cycle:
         formulas = self.sheets.read([f"'{title}'"], 'FORMULA')[0]
         shown = self.sheets.read([f"'{title}'"], 'FORMATTED_VALUE')[0]
         ignored = set(cfg.get('campos_ignorados') or [])
+        # Campos calculados pelas fórmulas financeiras do portal: cada lado calcula o seu
+        # (o portal pelas fórmulas configuradas, a planilha pelas dela). Sincronizar o resultado
+        # faria os dois lados se sobrescreverem a cada ciclo quando as fórmulas forem diferentes.
+        ignored |= {str(f.get('target')) for f in (project.get('financeFormulas') or []) if f.get('target')}
         synced = {c: f['id'] for c, f in mapping.items() if f['id'] not in ignored and f['id'] != id_field}
         id_col = next(c for c, f in mapping.items() if f['id'] == id_field)
 
