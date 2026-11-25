@@ -16,8 +16,20 @@ Como funciona
   Exclusões NÃO são propagadas: apenas aparecem no relatório.
 * Células com fórmula na planilha nunca são sobrescritas.
 
-Configuração: data/sheet-sync.json (ver LEIA-ME-SINCRONIA-PLANILHA.md).
+Planilhas conectadas pelo portal
+--------------------------------
+Quando alguém importa obras por um link do Google Sheets e deixa marcada a opção
+"Manter portal e planilha sincronizados", o projeto recebe "sheetSync" em app_state
+(planilhaId, campoId). Cada ciclo sincroniza também todos esses projetos, cada um com
+a própria base (chave planilha|projeto). Na primeira sincronia de um projeto conectado,
+as diferenças são resolvidas a favor do portal (os dados acabaram de vir da planilha).
+A planilha precisa estar compartilhada como Editor com o e-mail da conta de serviço.
+
+Configuração: data/sheet-sync.json (ver LEIA-ME-SINCRONIA-PLANILHA.md). Para sincronizar
+só as planilhas conectadas pelo portal, basta preencher credenciais e service_role_key
+(planilha_id e projeto_id podem ficar vazios).
 Uso manual:   python sheet_sync.py --uma-vez        (executa um ciclo)
+              python sheet_sync.py --todas          (todas as planilhas, inclusive as conectadas pelo portal)
               python sheet_sync.py --relatorio      (só compara, não grava nada)
 """
 
@@ -345,6 +357,10 @@ class Portal:
                 return p
         raise SyncError(f'Projeto {project_id} não encontrado no portal.')
 
+    def projects(self):
+        rows = http('GET', f'{self.url}/rest/v1/app_state?id=eq.1&select=body', self.headers)
+        return (rows[0]['body'] or {}).get('projects', []) if rows else []
+
     def obras(self, project_id):
         out, start = [], 0
         while True:
@@ -371,16 +387,22 @@ ENV_CONFIG = {'SHEET_SYNC_PLANILHA_ID': 'planilha_id', 'SHEET_SYNC_ABA': 'aba', 
               'SECAP_SUPABASE_URL': 'supabase_url'}
 
 
-def load_config() -> dict:
+def load_base_config() -> dict:
+    """Configuração comum (credenciais, banco, intervalo). planilha_id/projeto_id são opcionais."""
     cfg = dict(DEFAULT_CONFIG)
     if CONFIG_FILE.exists():
         cfg.update(json.loads(CONFIG_FILE.read_text(encoding='utf-8')))
-    elif not os.environ.get('SHEET_SYNC_PLANILHA_ID'):
+    elif not (os.environ.get('SHEET_SYNC_PLANILHA_ID') or os.environ.get('SECAP_SERVICE_ROLE_KEY')):
         raise SyncError(f'Configuração ausente: {CONFIG_FILE}')
     for name, key in ENV_CONFIG.items():
         if os.environ.get(name):
             cfg[key] = os.environ[name].strip()
     cfg['service_role_key'] = cfg.get('service_role_key') or os.environ.get('SECAP_SERVICE_ROLE_KEY', '')
+    return cfg
+
+
+def load_config() -> dict:
+    cfg = load_base_config()
     for key in ('planilha_id', 'projeto_id'):
         if not cfg.get(key):
             raise SyncError(f'Preencha "{key}" em {CONFIG_FILE}.')
@@ -726,9 +748,72 @@ def quick_check(cfg, cycle):
     return {'sheet': sheet, 'portal': portal, 'unchanged': unchanged}
 
 
-def run_once(dry_run=False, sheets=None, portal=None):
+def service_account_email():
+    """E-mail da conta de serviço (a planilha precisa ser compartilhada com ele como Editor)."""
+    try:
+        info = credentials_from_env()
+        if info is None:
+            cfg = load_base_config()
+            info = json.loads((ROOT / cfg['credenciais']).read_text(encoding='utf-8'))
+        return info.get('client_email') or ''
+    except Exception:  # noqa: BLE001 - só informativo
+        return ''
+
+
+def project_configs(base, portal):
+    """Uma configuração para cada projeto conectado a uma planilha pelo portal (project.sheetSync)."""
+    out = []
+    for p in portal.projects():
+        link = p.get('sheetSync') or {}
+        if not isinstance(link, dict) or not link.get('ativo') or not link.get('planilhaId') or not link.get('campoId'):
+            continue
+        cfg = dict(base)
+        cfg.update(planilha_id=str(link['planilhaId']), projeto_id=str(p.get('id')), aba=str(link.get('aba') or ''),
+                   campo_id=str(link['campoId']), primeira_sincronia='portal', _nome=p.get('name') or '')
+        out.append(cfg)
+    return out
+
+
+def all_configs():
+    """Planilha fixa de data/sheet-sync.json (se houver) + planilhas conectadas pelo portal."""
+    base = load_base_config()
+    configs = []
+    if base.get('planilha_id') and base.get('projeto_id'):
+        configs.append(load_config())
+    portal = Portal(base['supabase_url'], base['service_role_key'])
+    taken = {c['projeto_id'] for c in configs}
+    configs += [c for c in project_configs(base, portal) if c['projeto_id'] not in taken]
+    return configs
+
+
+def run_all():
+    """Sincroniza todas as planilhas. Erro em um projeto (ex.: planilha não compartilhada) não para os outros."""
+    results = {}
+    for cfg in all_configs():
+        try:
+            rep = run_once(cfg=cfg)
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            if '403' in msg or 'PERMISSION_DENIED' in msg:
+                msg = ('A planilha não está compartilhada como Editor com a conta de serviço '
+                       f'{service_account_email() or "(ver credenciais)"}. ' + msg[:200])
+            results[cfg['projeto_id']] = {'nome': cfg.get('_nome', ''), 'erro': msg}
+            log(f"[{cfg.get('_nome') or cfg['projeto_id']}] Erro: {msg}")
+            continue
+        results[cfg['projeto_id']] = {'nome': cfg.get('_nome', ''), 'erro': None, **rep}
+        if any(rep.get(k) for k in ('planilha_para_portal', 'portal_para_planilha',
+                                    'obras_criadas_no_portal', 'linhas_criadas_na_planilha')) or rep.get('conflitos'):
+            try:
+                log(f"[{cfg.get('_nome') or cfg['projeto_id']}] {summary(rep)}")
+            except Exception:  # noqa: BLE001 - registro nunca derruba a sincronia
+                pass
+    STATUS['projetos'] = results
+    return results
+
+
+def run_once(dry_run=False, sheets=None, portal=None, cfg=None):
     with _lock:
-        cfg = load_config()
+        cfg = cfg or load_config()
         cycle = Cycle(cfg, sheets, portal, dry_run)
         key, locked = state_key(cfg), False
         if not dry_run:
@@ -785,16 +870,15 @@ def _loop():
     delay = None
     while True:
         try:
-            cfg = load_config()
+            cfg = load_base_config()
             delay = max(30, int(cfg.get('intervalo_segundos') or 60))
             if cfg.get('ativo', True):
-                report = run_once()
-                STATUS.update(ultima_execucao=report['fim'], ultimo_erro=None,
-                              resumo={k: v for k, v in report.items() if k not in ('avisos',)})
-                if any(report[k] for k in ('planilha_para_portal', 'portal_para_planilha',
-                                           'obras_criadas_no_portal', 'linhas_criadas_na_planilha')) \
-                        or report['conflitos']:
-                    log(summary(report))
+                results = run_all()
+                errors = [r['erro'] for r in results.values() if r.get('erro')]
+                STATUS.update(ultima_execucao=dt.datetime.now().isoformat(timespec='seconds'),
+                              ultimo_erro='; '.join(errors)[:1000] or None,
+                              resumo={pid: {k: v for k, v in r.items() if k in ('nome', 'modo', 'erro')}
+                                      for pid, r in results.items()})
         except Exception as exc:  # noqa: BLE001 - a sincronia nunca derruba o portal
             STATUS.update(ultima_execucao=dt.datetime.now().isoformat(timespec='seconds'), ultimo_erro=str(exc))
             log(f'Erro: {exc}')
@@ -813,6 +897,11 @@ def start_background():
 
 
 if __name__ == '__main__':
+    if '--todas' in sys.argv:
+        # Todas as planilhas: a fixa (se houver) e as conectadas pelo portal.
+        for pid, res in run_all().items():
+            print(f"{res.get('nome') or pid}:", res['erro'] if res.get('erro') else summary(res))
+        sys.exit(0)
     try:
         rep = run_once(dry_run='--relatorio' in sys.argv)
     except SyncError as err:

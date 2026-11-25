@@ -6,7 +6,10 @@ Authorization: Bearer <SHEET_SYNC_SECRET> ou Bearer <CRON_SECRET>.
 
 Variáveis de ambiente:
   SHEET_SYNC_SECRET, GOOGLE_SERVICE_ACCOUNT_JSON (conteúdo do JSON da conta de serviço),
-  SHEET_SYNC_PLANILHA_ID, SHEET_SYNC_PROJETO_ID, SHEET_SYNC_ABA (opcional),
+  SHEET_SYNC_PLANILHA_ID, SHEET_SYNC_PROJETO_ID, SHEET_SYNC_ABA (opcionais: planilha fixa),
+Também sincroniza os projetos conectados a uma planilha pelo portal (project.sheetSync).
+GET ?conta=1 (sem autorização) devolve só o e-mail da conta de serviço, para o portal
+mostrar com quem a planilha precisa ser compartilhada.
   SECAP_SUPABASE_URL, SECAP_SERVICE_ROLE_KEY (as mesmas da notificação semanal).
 """
 
@@ -40,27 +43,33 @@ class handler(BaseHTTPRequestHandler):
         self._handle()
 
     def _handle(self):
+        if 'conta=1' in (self.path.split('?', 1)[1] if '?' in self.path else ''):
+            return self._send(200, {'conta_servico': sheet_sync.service_account_email()})
         if not _authorized(self.headers.get('Authorization', '')):
             return self._send(401, {'erro': 'Não autorizado.'})
         try:
-            cfg = sheet_sync.load_config()
+            cfg = sheet_sync.load_base_config()
             if not cfg.get('ativo', True):
                 return self._send(200, {'modo': 'pausada'})
-            report = sheet_sync.run_once()
-            if str(report.get('modo', '')).startswith('relat'):
-                # Sem base no banco, o ciclo só compara e nada é gravado.
-                return self._send(500, {'erro': 'Base da sincronia não encontrada no banco: depois de instalar '
-                                                 'sheet_sync_cloud.sql, rode uma sincronia pelo portal local '
-                                                 '(python sheet_sync.py --uma-vez) para copiar a base.'})
+            results = sheet_sync.run_all()
         except Exception as exc:  # noqa: BLE001 - devolve o erro para o log da Vercel
             print('[planilha] Erro:', exc, flush=True)
             return self._send(500, {'erro': str(exc)[:500]})
-        body = {k: report.get(k) for k in KEYS if k in report}
-        body['conflitos'] = len(report.get('conflitos') or [])
-        body['avisos'] = (report.get('avisos') or [])[:20]
-        if not report.get('ignorado') and any(report.get(k) for k in KEYS[1:5]):
-            print('[planilha]', sheet_sync.summary(report), flush=True)
-        return self._send(200, body)
+        body = {}
+        for pid, report in results.items():
+            item = {k: report.get(k) for k in KEYS if k in report}
+            item['nome'] = report.get('nome', '')
+            if report.get('erro'):
+                item['erro'] = report['erro'][:500]
+                print(f"[planilha] {item['nome'] or pid}: Erro: {item['erro']}", flush=True)
+            elif str(report.get('modo', '')).startswith('relat'):
+                # Sem base no banco, o ciclo só compara e nada é gravado.
+                item['erro'] = ('Base da sincronia não encontrada no banco: rode uma sincronia pelo portal local '
+                                '(python sheet_sync.py --uma-vez) para copiar a base.')
+            item['conflitos'] = report.get('conflitos') if isinstance(report.get('conflitos'), int) else len(report.get('conflitos') or [])
+            body[pid] = item
+        failed = [i for i in body.values() if i.get('erro')]
+        return self._send(500 if body and len(failed) == len(body) else 200, body)
 
     def _send(self, code, body):
         raw = json.dumps(body, ensure_ascii=False).encode('utf-8')

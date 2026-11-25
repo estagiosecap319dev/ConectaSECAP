@@ -38,6 +38,9 @@ class Handler(SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == '/api/sheet-sync/status':
             return self.reply_json(200, sheet_sync.STATUS)
+        if path == '/api/sheet-sync' and 'conta=1' in (urlparse(self.path).query or ''):
+            # Só o e-mail da conta de serviço: o portal mostra com quem compartilhar a planilha.
+            return self.reply_json(200, {'conta_servico': sheet_sync.service_account_email()})
         if path.startswith('/api/'):
             return self.reply_json(404, {
                 'error': 'As requisições da API do SECAP são gerenciadas diretamente pelo Supabase CLI local (porta 54321).'

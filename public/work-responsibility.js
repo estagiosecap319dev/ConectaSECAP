@@ -63,7 +63,8 @@ function workStageStatus(stage) {
     'Iniciado',
   ].includes(value)
     ? value
-    : null;
+    : // Etapa nova criada no quadro de Acompanhamento passa a ser um status da obra.
+      value || null;
 }
 function workStatusValue(p, stage) {
   const target = workStageStatus(stage);

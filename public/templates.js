@@ -1323,6 +1323,24 @@ function getGroupIcon(groupName) {
   return iconsByGroup[groupName] || 'folder';
 }
 
+// Seção automática de um campo sem seção definida (projetos criados por link ou arquivo).
+// Usa o nome e o tipo do campo; a seção escolhida pelo usuário sempre prevalece.
+function autoFieldGroup(field) {
+  const id = String(field?.id || '');
+  const n = ' ' + String(field?.name || id).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9%]+/g, ' ').trim() + ' ';
+  const has = (re) => re.test(n);
+  if (['nome', 'codigo'].includes(id) || (has(/^ (nome|id|codigo|cod|item|obra|titulo|empreendimento|denominacao) /) && n.trim().split(' ').length <= 3 && !has(/ (contrato|convenio|processo|sei|valor|prazo|data) /))) return 'Essenciais';
+  if (has(/ (avanco|progresso|percentual|%|andamento fisico) /)) return 'Acompanhamento';
+  if (field?.type === 'currency' || has(/ (valor|valores|orcamento|orcado|investimento|contrapartida|repasse|executado|captado|pago|pagamento|empenhado|empenho|liquidado|custo|preco|saldo|r) /)) return 'Financeiro';
+  if (field?.type === 'date' || has(/ (prazo|prazos|data|datas|inicio|termino|fim|vigencia|previsao|previsto|entrega|cronograma|dias|meses|duracao|conclusao|ano|mes) /)) return 'Prazos e marcos';
+  if (has(/ (endereco|bairro|bairros|regiao|regional|logradouro|cep|latitude|longitude|coordenada|coordenadas|localizacao|local|setor|municipio|cidade|zona|quadra|lote|mapa|georreferenciamento|distrito|rua|avenida) /)) return 'Localização';
+  if (has(/ (status|situacao|etapa|macroetapa|fase|responsavel|fiscal|gestor|providencia|observacao|observacoes|obs|acao|acoes|prioridade|atualizacao|atualizado|pendencia|pendencias|risco|riscos|comentario|comentarios) /)) return 'Acompanhamento';
+  if (field?.type === 'link' || has(/ (sei|processo|documento|documentos|etp|tr|termo|parecer|licenca|licenciamento|alvara|anexo|anexos|link|arquivo|projeto basico|projeto executivo|art|rrt) /)) return 'Documentação';
+  if (has(/ (convenio|fonte|programa|contrato|contratada|empresa|licitacao|licitatorio|modalidade|instrumento|emenda|ministerio|financiamento|operacao|recurso|recursos|parceiro|proponente) /)) return 'Recursos e instrumentos';
+  if (has(/ (orgao|secretaria|unidade|tipo|categoria|objeto|descricao|eixo|area) /)) return 'Essenciais';
+  return 'Outras informações';
+}
+
 let secapEditSession = {
   active: false,
   pid: '',
@@ -2762,7 +2780,12 @@ function projectLayoutView(p) {
   const fields = (p.fields || [])
     .map((f, i) => ({ f, i, at: position.has(f.id) ? position.get(f.id) : Infinity }))
     .sort((a, b) => (a.at === b.at ? a.i - b.i : a.at < b.at ? -1 : 1))
-    .map(({ f }) => ({ ...f, group: groupOf.get(f.id) || f.group }));
+    // Campo sem seção (importado por link ou arquivo) entra na seção automática pelo nome/tipo.
+    .map(({ f }) => {
+      const saved = groupOf.get(f.id);
+      const auto = f.group || autoFieldGroup(f);
+      return { ...f, group: saved && !(saved === 'Outras informações' && !f.group) ? saved : auto };
+    });
   return {
     ...p,
     fields,
@@ -2813,6 +2836,9 @@ function getProjectSections(p) {
     if (idxA !== -1 && idxB !== -1) return idxA - idxB;
     if (idxA !== -1) return -1;
     if (idxB !== -1) return 1;
+    const standard = ['Essenciais', 'Localização', 'Documentação', 'Prazos e marcos', 'Financeiro', 'Recursos e instrumentos', 'Acompanhamento', 'Outras informações'];
+    const stdA = standard.indexOf(a), stdB = standard.indexOf(b);
+    if (stdA !== -1 && stdB !== -1) return stdA - stdB;
     if (a === 'Essenciais') return -1;
     if (b === 'Essenciais') return 1;
     return a.localeCompare(b, 'pt-BR');
