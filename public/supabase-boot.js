@@ -36,6 +36,7 @@ const APP_SCRIPTS = [
   'record-field-search.js',
   'weekly-summary.js',
   'finance-formulas.js',
+  'record-discard.js',
 ];
 
 function showBootError(message) {
