@@ -19,10 +19,11 @@
   function info(x) {
     var r = x.r,
       p = x.p;
-    var status = canonicalStatus(val(r,p,'status')); 
-    var finished = isFinished(r, p);
+    var status = typeof workSituation==='function'?workSituation(r,p):canonicalStatus(val(r,p,'status'));
+    var finished = isFinished(r, p) || status==='Concluído';
     var cancelled = /cancel/i.test(status);
-    var deadline = val(r, p, 'deadline');
+    var deadlineCheck=overviewDeadline(r,p);
+    var deadline = deadlineCheck.valid?deadlineCheck.date:'';
     var dl = deadline ? daysLeft(deadline) : null;
     var late = (!!deadline&&dl<0||status==='Atrasado')&&!finished&&!cancelled;
     var owner=String(val(r,p,'owner')||'').trim();
@@ -162,9 +163,9 @@
     var top = attention.slice(0, 6);
     var attHtml = top.length ? '<div class="balanced-table-scroll"><table class="balanced-attention-table"><thead><tr><th>Obra</th><th>Responsável</th><th>Prazo</th><th>Situação</th><th><span class="sr-only">Abrir obra</span></th></tr></thead><tbody>'+top.map(function(i){
       var owner=String(val(i.x.r,i.x.p,'owner')||'').trim();
-      var deadline=val(i.x.r,i.x.p,'deadline');
+      var deadlineCheck=overviewDeadline(i.x.r,i.x.p);var deadline=deadlineCheck.valid?deadlineCheck.date:'';
       var tags=(i.idle?[['stale',idleText(i.idleDays)]]:[]).concat(reasons(i).filter(function(t){return t[0]!=='stale'}));
-      return '<tr><td><button class="balanced-obra-link" type="button" onclick="editRecord(\''+esc(i.x.p.id)+'\',\''+esc(i.x.r.id)+'\')">'+esc(i.title)+'</button><small>'+esc(i.x.p.name)+'</small>'+(i.x.r.proxima?'<small class="balanced-next-action">'+esc(i.x.r.proxima)+'</small>':'')+'</td><td>'+esc(owner||'Não informado')+'</td><td class="balanced-deadline">'+esc(deadline?date(deadline):'Sem prazo')+'</td><td><div class="att-tags">'+tags.map(function(t){return '<span class="att-tag '+t[0]+'">'+esc(t[1])+'</span>'}).join('')+'</div></td><td>'+openBtn(i.x.p.id,i.x.r.id)+'</td></tr>';
+      return '<tr><td><button class="balanced-obra-link" type="button" onclick="editRecord(\''+esc(i.x.p.id)+'\',\''+esc(i.x.r.id)+'\')">'+esc(i.title)+'</button><small>'+esc(i.x.p.name)+'</small>'+(i.x.r.proxima?'<small class="balanced-next-action">'+esc(i.x.r.proxima)+'</small>':'')+'</td><td>'+esc(owner||'Não informado')+'</td><td class="balanced-deadline">'+esc(deadline?date(deadline):deadlineCheck.missing?'Sem prazo':'Conferir data')+'</td><td><div class="att-tags">'+tags.map(function(t){return '<span class="att-tag '+t[0]+'">'+esc(t[1])+'</span>'}).join('')+'</div></td><td>'+openBtn(i.x.p.id,i.x.r.id)+'</td></tr>';
     }).join('')+'</tbody></table></div>':'<div class="balanced-empty">'+icon('check')+'<b>'+(all.length?'Nenhuma obra exige atenção pelos critérios atuais':'Ainda não há obras cadastradas')+'</b><p>Atrasos, paralisações, pontos de atenção e obras sem alteração há mais de '+IDLE_DAYS+' dias aparecem aqui.</p></div>';
     var upcoming=upcomingWorks(all);
     var upcomingHtml=upcoming.length?'<ul class="balanced-deliveries">'+upcoming.slice(0,5).map(deliveryRow).join('')+'</ul>':'<div class="balanced-empty"><p>Nenhuma obra com prazo de entrega informado nos próximos 30 dias.</p></div>';
@@ -186,9 +187,9 @@
       ) +
       
       '<div class="overview-balanced">'+
-      '<section class="dkpis balanced-kpis" aria-label="Resumo das obras">'+kpiHtml+'</section>'+
+      '<section class="dkpis balanced-kpis" aria-label="Resumo das obras">'+kpiHtml+'</section>'+overviewReviewPanel(projects)+
       '<div class="balanced-main-grid"><section class="panel balanced-attention"><div class="panelhead"><div><h2>Obras que precisam de atenção</h2><small>'+attention.length+' obra(s) identificada(s) · exibindo até 6</small></div>'+(attention.length?'<button class="textbtn" onclick="dashOpen(\'attention\')">Ver todas '+icon('arrow')+'</button>':'')+'</div>'+attHtml+'</section>'+
-      '<section class="panel balanced-status"><div class="panelhead"><div><h2>Situação das obras</h2><small>Clique em uma barra para consultar as obras</small></div></div><div class="panelbody"><div id="dashStatus" class="dchart" style="height:340px"></div></div></section></div>'+
+      overviewStatusPanel(all)+projectSummaryPanel(projects,all)+'</div>'+overviewFinancePanel(projects)+
       '<section class="panel balanced-upcoming"><div class="panelhead"><div><h2>'+icon('calendar')+' Próximas entregas</h2><small>Prazos de entrega informados para os próximos 30 dias</small></div>'+(upcoming.length?'<button class="textbtn" onclick="dashUpcoming()">Ver todas '+icon('arrow')+'</button>':'')+'</div>'+upcomingHtml+'</section></div>'+
       '<div class="dgrid" style="grid-template-columns:1fr">' +
       (isSysAdmin() ? recentEditorsPanel() : recentObrasPanel(all)) +
@@ -196,11 +197,17 @@
     );
   };
 
+  // Resumo por projeto: quantas obras, em andamento, concluídas e que exigem atenção.
+  function projectSummaryPanel(projects,all){
+    var rows=projects.map(function(p){var mine=all.filter(function(i){return i.x.p===p});var c=function(f){return mine.filter(f).length};
+      return '<tr><td><button type="button" class="balanced-obra-link" onclick="go(\'projects\',\''+esc(p.id)+'\')">'+esc(p.name||'Projeto')+'</button></td><td>'+mine.length+'</td><td>'+c(function(i){return i.running})+'</td><td>'+c(function(i){return i.finished})+'</td><td class="'+(c(needsAttention)?'dash-sum-alert':'')+'">'+c(needsAttention)+'</td></tr>';}).join('');
+    return '<section class="panel balanced-projects"><div class="panelhead"><div><h2>Resumo por projeto</h2><small>Clique no projeto para abrir a pasta</small></div></div>'+(projects.length?'<div class="balanced-table-scroll"><table class="balanced-attention-table dash-summary-table"><thead><tr><th>Projeto</th><th>Obras</th><th>Em andamento</th><th>Concluídas</th><th>Atenção</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="balanced-empty"><p>Nenhum projeto liberado.</p></div>')+'</section>';
+  }
   function needsAttention(i){return !i.finished&&!i.cancelled&&(i.idle||i.late||i.paralyzed||i.attention);}
-  function upcomingWorks(all){return all.filter(function(i){var deadline=val(i.x.r,i.x.p,'deadline');var remaining=deadline?daysLeft(deadline):null;return !i.finished&&!i.cancelled&&remaining!==null&&remaining>=0&&remaining<=30;}).sort(function(a,b){return daysLeft(val(a.x.r,a.x.p,'deadline'))-daysLeft(val(b.x.r,b.x.p,'deadline'));});}
+  function upcomingWorks(all){return all.filter(function(i){var assessed=overviewDeadline(i.x.r,i.x.p);var remaining=assessed.valid?daysLeft(assessed.date):null;return !i.finished&&!i.cancelled&&remaining!==null&&remaining>=0&&remaining<=30;}).sort(function(a,b){return daysLeft(overviewDeadline(a.x.r,a.x.p).date)-daysLeft(overviewDeadline(b.x.r,b.x.p).date);});}
   function deliveryRow(i){return '<li><div><button type="button" class="balanced-obra-link" onclick="editRecord(\''+esc(i.x.p.id)+'\',\''+esc(i.x.r.id)+'\')">'+esc(i.title)+'</button><small>'+esc(i.x.p.name)+' · '+esc(i.x.r.proxima||'Prazo de entrega da obra')+'</small></div><span class="balanced-delivery-date">'+icon('calendar')+esc(date(val(i.x.r,i.x.p,'deadline')))+'</span></li>';}
   window.dashUpcoming=function(){var all=rowsOf(typeof visible==='function'?visible():db.projects||[]).map(info);var upcoming=upcomingWorks(all);modal('Próximas entregas · 30 dias','<ul class="balanced-deliveries">'+upcoming.map(deliveryRow).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
-  window.dashStatusWorks=function(status){var list=rowsOf(typeof visible==='function'?visible():db.projects||[]).map(info).filter(function(i){return normalizarStatus(i.status)===status});modal('Obras · '+status,'<ul class="balanced-deliveries">'+list.map(function(i){return '<li><div><b>'+esc(i.title)+'</b><small>'+esc(i.x.p.name)+'</small></div>'+openBtn(i.x.p.id,i.x.r.id)+'</li>'}).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
+  window.dashStatusWorks=function(status){var list=rowsOf(typeof visible==='function'?visible():db.projects||[]).map(info).filter(function(i){return i.status===status});modal('Obras · '+status,'<ul class="balanced-deliveries">'+list.map(function(i){return '<li><div><b>'+esc(i.title)+'</b><small>'+esc(i.x.p.name)+'</small></div>'+openBtn(i.x.p.id,i.x.r.id)+'</li>'}).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
 
   function openBtn(pid,rid){return '<button type="button" class="btn" onclick="editRecord(\''+esc(pid)+"','"+esc(rid)+'\')">Abrir '+icon('arrow')+'</button>'}
 
@@ -322,6 +329,8 @@
     return { el: el, c: c };
   }
   // Função para unificar nomes duplicados e remover códigos numéricos
+  var STAGE_COLORS={'Em estruturação':'#97B0BF','Planejamento':'#FFBF00','Preparatório para Contratação':'#D2AE61','Contratação':'#169DC4','Mobilização':'#7C3AED','Execução':'#007EFF'};
+  function situationColor(name){return STAGE_COLORS[name]||statusColor(name)}
   function normalizarStatus(status) {
     return canonicalStatus(status);
   }
@@ -329,12 +338,14 @@
   function drawCharts(projects, all) {
     var a=chartOn('dashStatus');
     if(a){
-      var counts={};all.forEach(function(i){var st=normalizarStatus(i.status);counts[st]=(counts[st]||0)+1;});
-      var names=Object.keys(counts).sort(function(x,y){return counts[y]-counts[x]||x.localeCompare(y,'pt-BR')});
-      if(!names.length)empty(a.el,'Ainda não há obras cadastradas.');
+      var counts={},outside=0;all.forEach(function(i){if(i.status==='Não informado'){outside++;return}counts[i.status]=(counts[i.status]||0)+1;});
+      var order=WORK_STATUS_LABELS.concat(WORK_STAGE_LABELS);
+      var names=order.filter(function(n){return counts[n]});
+      var note=document.getElementById('dashStatusNote');if(note)note.textContent=outside?outside+(outside===1?' obra sem situação informada':' obras sem situação informada')+' (fora das listas de status ou de etapas).':'';
+      if(!names.length)empty(a.el,all.length?'Nenhuma obra com situação informada.':'Ainda não há obras cadastradas.');
       else{
         a.el.style.height=Math.max(280,names.length*48+50)+'px';a.c.resize();
-        a.c.setOption({grid:{left:14,right:38,top:12,bottom:20,containLabel:true},tooltip:{trigger:'axis',axisPointer:{type:'shadow'},confine:true,valueFormatter:function(v){return v+(v===1?' obra':' obras')}},xAxis:{type:'value',minInterval:1,axisLabel:{color:'#667b89'},splitLine:{lineStyle:{color:'#edf2f5'}}},yAxis:{type:'category',inverse:true,data:names,axisTick:{show:false},axisLine:{show:false},axisLabel:{color:'#003249',fontSize:12,width:110,overflow:'break',lineHeight:17}},series:[{type:'bar',name:'Obras',barMaxWidth:22,label:{show:true,position:'right',color:'#003249',fontWeight:700},data:names.map(function(name){return {name:name,value:counts[name],itemStyle:{color:statusColor(name),borderColor:'#bbcbd5',borderWidth:1,borderRadius:[0,4,4,0]}};})}]},true);
+        a.c.setOption({grid:{left:14,right:38,top:12,bottom:20,containLabel:true},tooltip:{trigger:'axis',axisPointer:{type:'shadow'},confine:true,valueFormatter:function(v){return v+(v===1?' obra':' obras')}},xAxis:{type:'value',minInterval:1,axisLabel:{color:'#667b89'},splitLine:{lineStyle:{color:'#edf2f5'}}},yAxis:{type:'category',inverse:true,data:names,axisTick:{show:false},axisLine:{show:false},axisLabel:{color:'#003249',fontSize:14,width:140,overflow:'break',lineHeight:17}},series:[{type:'bar',name:'Obras',barMaxWidth:22,label:{show:true,position:'right',color:'#003249',fontWeight:700},data:names.map(function(name){return {name:name,value:counts[name],itemStyle:{color:situationColor(name),borderColor:'#bbcbd5',borderWidth:1,borderRadius:[0,4,4,0]}};})}]},true);
         a.c.off('click');a.c.on('click',function(event){if(event.name)dashStatusWorks(event.name);});
       }
     }

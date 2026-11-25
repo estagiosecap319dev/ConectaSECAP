@@ -100,8 +100,21 @@ async function runSaveQueue() {
     pendingSaves = saveQueued ? 1 : 0;
   }
 }
+function passwordPolicyError(password) {
+  const pw = String(password || '');
+  if (pw.length < 8) return 'A senha deve ter no mínimo 8 caracteres.';
+  if (!/[^A-Za-z0-9\s]/.test(pw)) return 'A senha deve conter pelo menos 1 caractere especial (ex.: ! @ # $ %).';
+  return '';
+}
 async function authenticate(form) {
   const msg = document.getElementById('authMessage');
+  if (window.SECAP_SETUP) {
+    const policy = passwordPolicyError(form.password && form.password.value);
+    if (policy) {
+      msg.textContent = policy;
+      return;
+    }
+  }
   msg.textContent = 'Aguarde…';
   const loading = window.SECAPLoading;
   if (loading) loading.show('Verificando suas credenciais…');
@@ -131,6 +144,11 @@ window.addEventListener('beforeunload', (e) => {
 async function submitRegistration(form) {
   const msg = document.getElementById('registerMessage');
   if (!msg) return;
+  const policy = passwordPolicyError(form.password && form.password.value);
+  if (policy) {
+    msg.textContent = policy;
+    return;
+  }
   msg.textContent = 'Enviando solicitação…';
   try {
     const r = await fetch('/api/register', {

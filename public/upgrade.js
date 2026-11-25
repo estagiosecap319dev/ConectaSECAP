@@ -204,9 +204,61 @@ render = function () {
   const content = $('.content');
   if (content) content.classList.toggle('bi-content', tab === 'bi');
 };
+// Projetos criados do zero (ou importados) têm campos com IDs próprios e nenhum vínculo
+// de BI. Quando o vínculo não foi configurado, o campo é reconhecido pelo nome.
+const semanticNameRules = {
+  status: [/^(status|situacao|situacaodaobra|statusdaobra|situacaoatual|statusatual)$/, /status|situacao/, /^(macroetapa|etapa|fase|etapaatual)$/],
+  stage: [/^(macroetapa|etapa|fase|etapaatual)$/, /etapa|fase/],
+  budget: [/^(valor|valortotal|valordaobra|valorprevisto|valorestimado|valorglobal|investimento|investimentoprevisto|orcamento|custo|custoestimado)$/, /valor|investimento|orcamento|custo/],
+  spent: [/^(executado|valorexecutado|valorpago|pago|liquidado|medido|valormedido)$/, /executado|pago|liquidado|medido/],
+  raised: [/captado/],
+  progress: [/^(progresso|avanco|avancofisico|percentual|percentualfisico|percentualexecutado|execucaofisica)$/, /avanco|progresso|percentual/],
+  deadline: [/^(prazo|prazofinal|prazodeentrega|datafim|datafinal|datadetermino|termino|previsaodeconclusao|previsaodetermino|dataprevista|conclusaoprevista)$/, /prazo|previsao|termino/],
+  owner: [/^(responsavel|responsavelacompanhamento|responsaveltecnico|gestor|fiscal)$/, /responsavel|gestor|fiscal/],
+  agency: [/^(orgao|secretaria|orgaoresponsavel|unidade|orgaoexecutor)$/, /orgao|secretaria/],
+  priority: [/prioridade/],
+  source: [/^(fonte|fontederecurso|fontedorecurso|origemdorecurso)$/, /fonte/],
+};
+const semanticNumeric = ['budget', 'spent', 'raised', 'progress'];
+const workSituationNames = ['Em planejamento', 'Em andamento', 'Concluído', 'Paralisado', 'Cancelado', 'Não iniciado', 'Atrasado', 'Ponto de Atenção', 'Em análise'];
+const inferredSemanticCache = new WeakMap();
+function semanticFieldFits(p, f, semantic) {
+  if (['long', 'link'].includes(f.type)) return false;
+  if (/observa|justific|comentario|detalhamento|^id/.test(importHeaderKey(f.name))) return false;
+  const filled = (p.records || []).map((r) => r[f.id]).filter((v) => v !== '' && v != null).slice(0, 200);
+  if (semanticNumeric.includes(semantic))
+    return ['number', 'currency', 'percent'].includes(f.type) || (filled.length > 0 && filled.every((v) => numberOrNull(v) !== null));
+  if (semantic === 'deadline')
+    return f.type === 'date' || (filled.length > 0 && filled.some((v) => spreadsheetDate(v)));
+  // Situação: a coluna precisa trazer situações de obra (Planejamento, Execução, Concluído...),
+  // e não, por exemplo, "Contratado" ou "Não se aplica".
+  if (semantic === 'status' && filled.length && typeof canonicalStatus === 'function') {
+    const known = filled.filter((v) => workSituationNames.includes(canonicalStatus(v))).length;
+    if (known / filled.length < 0.3) return false;
+  }
+  return !['number', 'currency', 'date'].includes(f.type);
+}
+function inferSemanticField(p, semantic) {
+  const rules = semanticNameRules[semantic];
+  if (!rules || !Array.isArray(p?.fields)) return undefined;
+  const total = (p.records || []).length;
+  let cache = inferredSemanticCache.get(p.fields);
+  if (!cache || cache.__records !== total) inferredSemanticCache.set(p.fields, (cache = { __records: total }));
+  if (semantic in cache) return p.fields.find((f) => f.id === cache[semantic]);
+  let found;
+  for (const rule of rules) {
+    found = p.fields.find((f) => rule.test(importHeaderKey(f.name)) && semanticFieldFits(p, f, semantic));
+    if (found) break;
+  }
+  cache[semantic] = found?.id || '';
+  return found;
+}
 function biField(p, semantic) {
   const id = p.biMapping?.[semantic] ?? semanticDefaults[semantic];
-  const field = p.fields.find((f) => f.id === id);
+  // Vínculo vazio ("Não associado") é uma escolha explícita e não é substituído.
+  const field =
+    p.fields.find((f) => f.id === id) ||
+    (p.biMapping?.[semantic] === '' ? undefined : inferSemanticField(p, semantic));
   if (['deadline', 'startDate'].includes(semantic)) {
     const mapped = p.biMapping?.[semantic];
     if (mapped && field && (p.records || []).some((r) => spreadsheetDate(r[field.id]))) return field;

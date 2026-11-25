@@ -15,7 +15,7 @@ function customizeBuiltinContainerDraft() {
   if(!containerDraft)return;
   readContainerForm();
   const b=containerDraft.block,p=layoutProject()||visible()[0],defaults=newPageBlock('metric');
-  b.project=p?.id||'@visible';b.followFilters=true;b.customized=true;
+  b.project=layoutProject()?.id||(visible().length===1?visible()[0].id:'@visible');b.followFilters=true;b.customized=true;
   b.metric||=defaults.metric;b.chart||=defaults.chart;b.fields||=defaults.fields;
   b.model=defaultContainerModel(p);b.color||='#003856';
   const title=importHeaderKey(b.title);
@@ -24,6 +24,8 @@ function customizeBuiltinContainerDraft() {
     const candidates=(p?.fields||[]).filter(f=>['number','currency'].includes(f.type));
     const match=candidates.find(f=>importHeaderKey(f.name)===title)||candidates.find(f=>title.includes(importHeaderKey(f.name)));
     b.metric={field:match?.id||'@records',agg:match?'sum':'count',format:match?.type==='currency'?'currency':'number'};
+    const situation=[[/andamento|execu/,'Em andamento'],[/conclu/,'Concluído'],[/planeja/,'Em planejamento'],[/paralis/,'Paralisado'],[/cancel/,'Cancelado']].find(([re])=>re.test(title));
+    if(situation&&!match)Object.assign(b.metric,{filterField:'__situacao',filterValues:[situation[1]]});
   }
   renderContainerModal();
 }

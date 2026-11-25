@@ -1,0 +1,145 @@
+/* Tela de login — formulário maior e painel institucional refinado. */
+
+/* ---------- Painel institucional (esquerda) ---------- */
+.login .loginart .loginart-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 600px;
+  width: 100%;
+}
+.login .loginart .loginart-copy h1 {
+  max-width: 600px !important;
+  margin: 0 !important;
+  font-size: clamp(36px, 3.3vw, 54px) !important;
+  font-weight: 700 !important;
+  line-height: 1.14 !important;
+  letter-spacing: -1px !important;
+  color: #fff !important;
+}
+.login .loginart .loginart-copy h1 em {
+  font-style: normal;
+  color: #f37021;
+}
+.login .loginart .loginart-rule {
+  display: block;
+  width: 72px;
+  height: 4px;
+  margin: 30px 0 24px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #f37021, #fdd835);
+}
+.login .loginart .loginart-copy p {
+  max-width: 470px !important;
+  margin: 0 !important;
+  font-size: clamp(16px, 1.25vw, 19px) !important;
+  line-height: 1.7 !important;
+  color: rgba(237, 245, 249, 0.88) !important;
+}
+.login .loginart .loginart-points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 600px;
+  margin: 44px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.login .loginart .loginart-points li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 16px 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 3px solid #f37021;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.login .loginart .loginart-points b {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+.login .loginart .loginart-points span {
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(237, 245, 249, 0.72);
+}
+
+/* ---------- Formulário (direita) — maior ---------- */
+.login .loginform {
+  max-width: 560px !important;
+  padding: 56px !important;
+}
+.login .loginform .eyebrow {
+  font-size: 12px !important;
+  letter-spacing: 1.2px !important;
+}
+.login .loginform h1 {
+  font-size: 32px !important;
+  margin: 14px 0 12px !important;
+}
+.login .loginform p,
+.login .loginform .subtitle {
+  font-size: 15px !important;
+}
+.login .loginform .subtitle {
+  margin-bottom: 30px !important;
+}
+.login .loginform .field {
+  margin-bottom: 22px !important;
+}
+.login .loginform label {
+  font-size: 14px !important;
+  margin-bottom: 8px !important;
+}
+.login .loginform input {
+  height: 50px !important;
+  min-height: 50px !important;
+  padding: 12px 16px !important;
+  font-size: 15px !important;
+  border-radius: 9px !important;
+}
+.login .loginform .btn,
+.login .loginform .btn.primary,
+.login .loginform .google-login {
+  min-height: 50px !important;
+  padding: 12px 18px !important;
+  font-size: 15px !important;
+  border-radius: 9px !important;
+}
+.login .loginform small,
+.login .loginform .password-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 12.5px !important;
+  line-height: 1.5;
+  color: #5b6b76 !important;
+}
+.login .loginform .login-create {
+  font-size: 14px !important;
+}
+.login .login-divider {
+  margin: 28px 0 !important;
+}
+
+/* ---------- Responsivo ---------- */
+@media (max-width: 1100px) {
+  .login .loginart .loginart-points {
+    grid-template-columns: 1fr;
+    max-width: 380px;
+  }
+}
+@media (max-width: 720px) {
+  .login .loginart .loginart-copy h1 {
+    font-size: 32px !important;
+  }
+  .login .loginart .loginart-points {
+    margin-top: 32px;
+  }
+  .login .loginform {
+    padding: 36px 24px !important;
+  }
+  .login .loginform h1 {
+    font-size: 26px !important;
+  }
+}

@@ -23,3 +23,9 @@
 .compact-calendar .agenda-day>strong,.compact-calendar .agenda-day>small{font-size:11px!important}
 .day-statuses span,.day-statuses small{font-size:11px!important;line-height:1.5!important}
 @media(max-width:600px){.day-statuses span{font-size:10px!important}.agenda-legend{gap:8px 12px!important}}
+
+/* Legendas: preservar a tipografia e os marcadores originais em qualquer tela. */
+#app .content .agenda-legend{font-family:var(--gyn-font);font-size:12px!important;line-height:1.65;color:inherit;gap:10px 16px!important}
+#app .content .agenda-legend span{font-family:inherit;font-size:12px!important;font-weight:400;line-height:inherit;color:inherit}
+#app .content .agenda-legend i{width:9px!important;height:9px!important;flex-shrink:0}
+@media(max-width:600px){#app .content .agenda-legend{gap:8px 12px!important}}

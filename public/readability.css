@@ -1,0 +1,60 @@
+/* Tipografia original: tamanhos definidos nas folhas de cada componente.
+   Mantidos abaixo apenas os ajustes de disposição dos indicadores. */
+
+/* Visão geral: cada cartão de indicador ocupa todo o seu contêiner */
+.page-container > .container-content > .dkpi {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  display: grid !important;
+  grid-template-columns: 48px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto auto !important;
+  column-gap: 14px !important;
+  row-gap: 4px !important;
+  align-items: center;
+  text-align: left;
+  min-height: 140px;
+  padding: 22px !important;
+  border: 1px solid #dce5eb !important;
+  border-top: 4px solid #003249 !important;
+  border-radius: 12px !important;
+  background: #fff !important;
+  cursor: pointer;
+}
+.page-container > .container-content > .dkpi.cyan { border-top-color: #007eff !important; }
+.page-container > .container-content > .dkpi.green { border-top-color: #00b67b !important; }
+.page-container > .container-content > .dkpi.orange { border-top-color: #f37021 !important; }
+.page-container > .container-content > .dkpi .dkpi-ico {
+  grid-column: 1;
+  grid-row: 1 / 4 !important;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+.page-container > .container-content > .dkpi :is(.dkpi-label, .dkpi-num, .dkpi-sub) {
+  grid-column: 2 !important;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-transform: none !important;
+}
+.page-container > .container-content > .dkpi .dkpi-label { grid-row: 1 !important; font-weight: 600 !important; }
+.page-container > .container-content > .dkpi .dkpi-num { grid-row: 2 !important; font-size: 34px !important; font-weight: 750 !important; line-height: 1.2 !important; }
+.page-container > .container-content > .dkpi .dkpi-sub { grid-row: 3 !important; }
+/* Painéis da Visão geral dentro de contêineres */
+.overview-block { margin: 0 !important; height: 100%; }
+.overview-block > .panel { height: 100%; }
+
+/* Visão geral: "Obras que precisam de atenção" ocupa duas linhas à esquerda;
+   "Situação das obras" e "Resumo por projeto" ficam empilhados à direita. */
+.page-container:has(> .container-content .balanced-attention) { grid-row: span 2; }
+.page-container:has(> .container-content .balanced-attention) .panel { height: 100%; }
+.balanced-main-grid > .balanced-attention { grid-row: span 2; }
+.page-container:has(> .container-content .balanced-projects) { align-self: start; }
+.dash-status-note { margin: 4px 8px 0; color: #5f7584; }
+.dash-status-note:empty { display: none; }
+.dash-summary-table td:not(:first-child),
+.dash-summary-table th:not(:first-child) { text-align: center; white-space: nowrap; }
+.dash-summary-table .dash-sum-alert { color: #c2410c; font-weight: 700; }

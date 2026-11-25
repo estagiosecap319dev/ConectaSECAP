@@ -17,6 +17,7 @@ const APP_SCRIPTS = [
   'status-presentation.js',
   'executive-models.js',
   'executive-overview.js',
+  'overview-review.js',
   'dashboard-v2.js',
   'records-cards.js',
   'search-suggest.js',
@@ -220,6 +221,12 @@ async function requireMember(sb) {
   return { user, role: data.role };
 }
 
+function passwordPolicyOk(password) {
+  return password.length >= 8 && /[^A-Za-z0-9\s]/.test(password);
+}
+const PASSWORD_POLICY_TEXT =
+  'A senha deve ter no mínimo 8 caracteres e pelo menos 1 caractere especial.';
+
 function authMessage(error) {
   const text = error?.message || 'Não foi possível autenticar.';
   if (error?.status === 429 || /too many/i.test(text))
@@ -228,7 +235,7 @@ function authMessage(error) {
   if (/already registered|already been registered/i.test(text))
     return 'Já existe uma solicitação para este e-mail.';
   if (/password/i.test(text) && /at least|should be/i.test(text)) {
-    return 'Informe e-mail e senha de pelo menos 12 caracteres.';
+    return 'Informe e-mail e uma senha com no mínimo 8 caracteres e 1 caractere especial.';
   }
   return text;
 }
@@ -352,11 +359,11 @@ async function registerAccount(sb, data) {
     email.length > 254 ||
     !jobTitle ||
     jobTitle.length > 120 ||
-    password.length < 12 ||
+    !passwordPolicyOk(password) ||
     password.length > 512
   ) {
     return jsonResponse(400, {
-      error: 'Preencha todos os campos. A senha deve ter pelo menos 12 caracteres.',
+      error: 'Preencha todos os campos. ' + PASSWORD_POLICY_TEXT,
     });
   }
   const adminEmail = await sb.rpc('email_is_admin', { target: email });
@@ -406,8 +413,8 @@ async function signInAccount(sb, path, data) {
   if (exists.error) return jsonResponse(500, { error: exists.error.message });
   if (path === '/api/setup') {
     if (exists.data) return jsonResponse(409, { error: 'Administrador já configurado.' });
-    if (!email.includes('@') || password.length < 12) {
-      return jsonResponse(400, { error: 'Informe e-mail e senha de pelo menos 12 caracteres.' });
+    if (!email.includes('@') || !passwordPolicyOk(password)) {
+      return jsonResponse(400, { error: 'Informe um e-mail válido. ' + PASSWORD_POLICY_TEXT });
     }
     const created = await sb.auth.signUp({ email, password });
     if (created.error)

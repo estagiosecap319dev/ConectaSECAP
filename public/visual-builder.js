@@ -326,7 +326,11 @@ function commitDesign(p, design, action = 'Personalizou o BI') {
   return true;
 }
 function visualNumber(v) {
-  return numberOrNull(v);
+  const n = numberOrNull(v);
+  if (n !== null || typeof v !== 'string') return n;
+  let s = v.replace(/R\$|\s|%/g, '');
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$|^-?\d+,\d+$/.test(s)) s = s.replace(/\./g, '').replace(',', '.');
+  return numberOrNull(s);
 }
 function aggregateVisual(rows, field, agg) {
   if (agg === 'count') return rows.length;

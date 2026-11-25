@@ -188,6 +188,27 @@ const statusIs = (r, label) =>
   (typeof canonicalStatus === 'function' ? canonicalStatus(r.status) : r.status) === label;
 // Investimento: obras canceladas não entram na soma (mesmo critério do Painel executivo).
 const investRows = (rs) => rs.filter((r) => !statusIs(r, 'Cancelado'));
+// Indicadores da pasta: usam o campo vinculado (ou reconhecido pelo nome) em vez de IDs fixos,
+// para que projetos criados do zero também mostrem situação, avanço e investimento.
+const projectKey = (p, semantic, fallback) =>
+  (typeof fieldKey === 'function' ? fieldKey(p, semantic) : '') || fallback;
+const projectStatusIs = (r, p, label) => {
+  const v = r[projectKey(p, 'status', 'status')];
+  return (typeof canonicalStatus === 'function' ? canonicalStatus(v) : v) === label;
+};
+const projectNumbers = (rs, key) =>
+  rs.map((r) => r[key]).filter((v) => v !== '' && v != null && Number.isFinite(Number(v))).map(Number);
+const projectProgressText = (rs, p) => {
+  const key = projectKey(p, 'progress', 'progresso');
+  const ns = rs
+    .map((r) => (typeof physicalProgress === 'function' ? physicalProgress(r[key]) : Number(r[key])))
+    .filter((n) => n !== null && Number.isFinite(n));
+  return ns.length ? Math.round(ns.reduce((a, b) => a + b, 0) / ns.length) + '%' : '—';
+};
+const projectBudgetText = (rs, p) => {
+  const ns = projectNumbers(rs.filter((r) => !projectStatusIs(r, p, 'Cancelado')), projectKey(p, 'budget', 'valor'));
+  return ns.length ? compact(ns.reduce((a, b) => a + b, 0)) : '—';
+};
 const tone = (s) =>
   s === 'Concluído'
     ? 'green'
@@ -357,9 +378,9 @@ function login() {
   const formMarkup = window.SECAP_PREVIEW
     ? `<p>Esta é uma prévia de demonstração, sem autenticação real. Não informe sua senha.</p><button class="btn primary" type="button" onclick="resumeSECAPPreview()">Entrar na prévia</button>`
     : registering
-      ? `<form onsubmit="event.preventDefault();submitRegistration(this)"><div class="field"><label>Nome completo *</label><input name="name" required maxlength="120" autocomplete="name"></div><div class="field"><label>E-mail *</label><input name="email" type="email" required maxlength="254" autocomplete="email"></div><div class="field"><label>Senha *</label><input name="password" type="password" required minlength="12" maxlength="512" autocomplete="new-password"><small>Mínimo de 12 caracteres.</small></div><div class="field"><label>Cargo *</label><input name="job_title" required maxlength="120" placeholder="Ex.: Analista de projetos"></div><button class="btn primary" type="submit">Enviar solicitação</button><p id="registerMessage" role="status"></p></form><button class="login-create" type="button" onclick="showLogin()">Voltar para entrar</button>`
-      : `<form onsubmit="event.preventDefault();authenticate(this)"><div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="username"></div><div class="field"><label>Senha</label><input name="password" type="password" required minlength="12" autocomplete="${window.SECAP_SETUP ? 'new-password' : 'current-password'}"><small>Mínimo de 12 caracteres.</small></div><button class="btn primary" type="submit">${window.SECAP_SETUP ? 'Criar administrador' : 'Entrar'}</button><p id="authMessage" role="status"></p></form>${window.SECAP_SETUP ? '' : `<div class="login-divider"><span>ou</span></div><button class="btn google-login" type="button" onclick="googleLogin()"><span class="google-g">G</span> Continuar com Google</button><button class="login-create" type="button" onclick="showRegister()">Criar conta</button><p id="socialAuthMessage" class="social-auth-message" role="status"></p>`}`;
-  return `<div class="stripe"></div><div class="login"><section class="loginart"><img class="loginart-logo" src="marca-goiania-horizontal.svg" alt="Prefeitura de Goiânia"><h1>Projetos que avançam.<br>Uma cidade que transforma.</h1><p>Planejamento, acompanhamento e decisões conectados em um só lugar.</p></section><section class="loginform"><div class="eyebrow">PORTAL DE PROJETOS</div><h1>${heading}</h1><p class="subtitle">${subtitle}</p>${accessNoticeMarkup()}${formMarkup}</section></div>`;
+      ? `<form onsubmit="event.preventDefault();submitRegistration(this)"><div class="field"><label>Nome completo *</label><input name="name" required maxlength="120" autocomplete="name"></div><div class="field"><label>E-mail *</label><input name="email" type="email" required maxlength="254" autocomplete="email"></div><div class="field"><label>Senha *</label><input name="password" type="password" required minlength="8" maxlength="512" autocomplete="new-password"><small class="password-hint">Mínimo de 8 caracteres, incluindo pelo menos 1 caractere especial (ex.: ! @ # $ %).</small></div><div class="field"><label>Cargo *</label><input name="job_title" required maxlength="120" placeholder="Ex.: Analista de projetos"></div><button class="btn primary" type="submit">Enviar solicitação</button><p id="registerMessage" role="status"></p></form><button class="login-create" type="button" onclick="showLogin()">Voltar para entrar</button>`
+      : `<form onsubmit="event.preventDefault();authenticate(this)"><div class="field"><label>E-mail</label><input name="email" type="email" required autocomplete="username"></div><div class="field"><label>Senha</label><input name="password" type="password" required ${window.SECAP_SETUP ? 'minlength="8" maxlength="512" autocomplete="new-password"' : 'maxlength="512" autocomplete="current-password"'}>${window.SECAP_SETUP ? '<small class="password-hint">Mínimo de 8 caracteres, incluindo pelo menos 1 caractere especial (ex.: ! @ # $ %).</small>' : ''}</div><button class="btn primary" type="submit">${window.SECAP_SETUP ? 'Criar administrador' : 'Entrar'}</button><p id="authMessage" role="status"></p></form>${window.SECAP_SETUP ? '' : `<div class="login-divider"><span>ou</span></div><button class="btn google-login" type="button" onclick="googleLogin()"><span class="google-g">G</span> Continuar com Google</button><button class="login-create" type="button" onclick="showRegister()">Criar conta</button><p id="socialAuthMessage" class="social-auth-message" role="status"></p>`}`;
+  return `<div class="stripe"></div><div class="login"><section class="loginart"><img class="loginart-logo" src="marca-goiania-horizontal.svg" alt="Prefeitura de Goiânia"><div class="loginart-copy"><h1>Projetos que <em>avançam</em>.<br>Uma cidade que <em>transforma</em>.</h1><span class="loginart-rule" aria-hidden="true"></span><p>Planejamento, acompanhamento e decisões conectados em um só lugar.</p><ul class="loginart-points"><li><b>Planejamento</b><span>Metas e marcos organizados</span></li><li><b>Acompanhamento</b><span>Execução em tempo real</span></li><li><b>Decisões</b><span>Indicadores para a gestão</span></li></ul></div></section><section class="loginform"><div class="eyebrow">PORTAL DE PROJETOS</div><h1>${heading}</h1><p class="subtitle">${subtitle}</p>${accessNoticeMarkup()}${formMarkup}</section></div>`;
 }
 
 function showRegister() {
@@ -1963,7 +1984,8 @@ function projectView() {
   if (!p) return empty('Projeto indisponível', 'Seu perfil não tem acesso a esta pasta.');
   const rs = p.records
     .map((r) => ({ ...r, project: p }))
-    .filter((r) => matchesQuery(r) && matchesCustomFilters(r, p.fields));
+    .filter((r) => matchesQuery(r) && matchesCustomFilters(r, p.fields))
+    .sort((a, b) => overviewCompareId(a, b, p));
 
   const hasFilters = Boolean(query || customProjectFilters.length);
 
@@ -1985,21 +2007,17 @@ function projectView() {
       'folder'
     )}${stat(
       'AVANÇO MÉDIO',
-      rs.some((r) => r.progresso !== '' && r.progresso != null)
-        ? avg(rs.filter((r) => r.progresso !== '' && r.progresso != null)) + '%'
-        : '—',
+      projectProgressText(rs, p),
       'Progresso físico informado',
       'chart'
     )}${stat(
       'INVESTIMENTO',
-      investRows(rs).some((r) => r.valor !== '' && r.valor != null)
-        ? compact(sum(investRows(rs), 'valor'))
-        : '—',
+      projectBudgetText(rs, p),
       'Valor previsto nas obras (sem canceladas)',
       'money'
     )}${stat(
       'CONCLUÍDAS',
-      rs.filter((r) => statusIs(r, 'Concluído')).length,
+      rs.filter((r) => projectStatusIs(r, p, 'Concluído')).length,
       'Entregas registradas',
       'check'
     )}</div><div class="filters"><div class="search">${icon(
