@@ -1132,3 +1132,27 @@ body.menu-collapsed .sidebar-resizer {
   display: block;
   margin-top: 6px;
 }
+
+/* Campos em R$: prefixo fixo dentro da caixa; o número fica alinhado à direita, como dinheiro. */
+.currency-field {
+  position: relative;
+}
+.currency-field .currency-prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-weight: 600;
+  color: #5b6b76;
+  pointer-events: none;
+}
+.field .currency-field .currency-input {
+  width: 100%;
+  padding-left: 44px !important;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.field .currency-field .currency-input[aria-invalid="true"] {
+  border-color: #c2410c !important;
+  outline-color: #c2410c;
+}

@@ -3679,6 +3679,11 @@ function inputField(f, value, disabled) {
       .join('')}</select>`;
   } else if (f.type === 'boolean') {
     input = `<select ${attrs}><option value="">Selecione...</option>${currentValue && !['Sim', 'Não'].includes(currentValue) ? `<option value="${esc(currentValue)}" selected>${esc(currentValue)}</option>` : ''}<option value="Sim" ${currentValue === 'Sim' ? 'selected' : ''}>Sim</option><option value="Não" ${currentValue === 'Não' ? 'selected' : ''}>Não</option></select>`;
+  } else if (f.type === 'currency') {
+    // Campo visível em R$ (1.519.076,06); o campo escondido com o mesmo nome guarda o número
+    // puro (1519076.06), que é o que a gravação e a detecção de alterações leem.
+    const shown = currencyInputText(currentValue);
+    input = `<div class="currency-field"><span class="currency-prefix" aria-hidden="true">R$</span><input type="text" class="currency-input" inputmode="decimal" autocomplete="off" aria-label="${esc(f.name)}" data-currency-for="${esc(f.id)}" value="${esc(shown)}" placeholder="0,00" ${f.required ? 'required' : ''} ${disabled ? 'disabled' : ''}></div><input type="hidden" name="${f.id}" data-original-value="${esc(currentValue)}" value="${esc(currentValue)}" ${disabled ? 'disabled' : ''}>`;
   } else {
     const inputType =
       { date: 'date', number: 'number', currency: 'number', link: 'url' }[f.type] || 'text';
@@ -3691,10 +3696,66 @@ function inputField(f, value, disabled) {
     : f.type === 'date'
       ? '<small>Aparece automaticamente no calendário.</small>'
       : f.type === 'currency'
-        ? '<small>Informe o valor em reais. O dado será salvo como número.</small>'
+        ? '<small>Valor em reais. Use vírgula para os centavos (ex.: 1.250,50).</small>'
         : '';
   return `<div class="field"><label>${esc(f.name)}${f.required ? ' *' : ''}</label>${input}${help}</div>`;
 }
+
+// ---- Campos em R$ -------------------------------------------------------------
+// Número puro (1519076.06 ou "1519076,06") -> texto "1.519.076,06". Vazio continua vazio;
+// texto que não é número é mostrado como está (dado antigo da planilha, por exemplo).
+function currencyInputText(raw) {
+  if (raw === '' || raw == null) return '';
+  const n = parseCurrencyInput(String(raw));
+  return n === null
+    ? String(raw)
+    : n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// Texto digitado -> número (ou null se não der para entender). Aceita "1.519.076,06",
+// "1519076,06", "1519076.06", "R$ 1.519.076" e "-200,00".
+function parseCurrencyInput(text) {
+  let s = String(text ?? '').replace(/R\$|\s| /g, '');
+  if (!s) return null;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); // só pontos de milhar
+  if (!/^-?\d*\.?\d+$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+function currencyHiddenFor(el) {
+  const form = el.form || el.closest('form') || document;
+  return [...form.querySelectorAll('input[type="hidden"]')].find((h) => h.name === el.dataset.currencyFor);
+}
+// Enquanto digita: atualiza o número escondido. Ao sair do campo: formata em R$.
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.matches?.('.currency-input')) return;
+  const hidden = currencyHiddenFor(el);
+  if (!hidden) return;
+  const text = el.value.trim();
+  const n = parseCurrencyInput(text);
+  const ok = text === '' || n !== null;
+  el.setAttribute('aria-invalid', ok ? 'false' : 'true');
+  el.setCustomValidity(ok ? '' : 'Valor inválido. Use o formato 1.250,50.');
+  if (ok) {
+    // Sem alteração real, mantém o texto original (evita marcar "alterado" à toa).
+    const original = hidden.dataset.originalValue ?? '';
+    const same = text === '' ? original === '' : parseCurrencyInput(original) === n;
+    hidden.value = same ? original : text === '' ? '' : String(n);
+    hidden.dispatchEvent(new Event('input', { bubbles: true }));
+    hidden.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+});
+document.addEventListener(
+  'blur',
+  (e) => {
+    const el = e.target;
+    if (!el.matches?.('.currency-input') || el.getAttribute('aria-invalid') === 'true') return;
+    const n = parseCurrencyInput(el.value);
+    if (n !== null) el.value = n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  },
+  true
+);
 
 // Abre os detalhes da obra em modo tela cheia real
 function editRecord(pid, rid = '') {
