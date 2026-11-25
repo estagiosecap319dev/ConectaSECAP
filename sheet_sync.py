@@ -263,11 +263,12 @@ def col_letter(index: int) -> str:
 class GoogleSheets:
     SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
 
-    def __init__(self, credentials_path: Path, spreadsheet_id: str):
-        try:
-            info = json.loads(Path(credentials_path).read_text(encoding='utf-8'))
-        except FileNotFoundError:
-            raise SyncError(f'Arquivo de credenciais não encontrado: {credentials_path}') from None
+    def __init__(self, credentials_path: Path, spreadsheet_id: str, info: dict | None = None):
+        if info is None:
+            try:
+                info = json.loads(Path(credentials_path).read_text(encoding='utf-8'))
+            except FileNotFoundError:
+                raise SyncError(f'Arquivo de credenciais não encontrado: {credentials_path}') from None
         self.email = info['client_email']
         self._key = info['private_key']
         self._token_uri = info.get('token_uri', 'https://oauth2.googleapis.com/token')
@@ -349,6 +350,9 @@ class Portal:
                 return out
             start += 1000
 
+    def rpc(self, name, payload):
+        return http('POST', f'{self.url}/rest/v1/rpc/{name}', self.headers, payload)
+
     def apply(self, project_id, updates, inserts, sheet_name):
         return http('POST', f'{self.url}/rest/v1/rpc/secap_sheet_sync_apply', self.headers, {
             'p_project': project_id, 'p_updates': updates, 'p_inserts': inserts, 'p_sheet_name': sheet_name})
@@ -356,11 +360,20 @@ class Portal:
 
 # ----------------------------------------------------------------------------- sincronia
 
+# Variáveis de ambiente (Vercel, onde não existe data/) -> chave da configuração.
+ENV_CONFIG = {'SHEET_SYNC_PLANILHA_ID': 'planilha_id', 'SHEET_SYNC_ABA': 'aba', 'SHEET_SYNC_PROJETO_ID': 'projeto_id',
+              'SECAP_SUPABASE_URL': 'supabase_url'}
+
+
 def load_config() -> dict:
-    if not CONFIG_FILE.exists():
-        raise SyncError(f'Configuração ausente: {CONFIG_FILE}')
     cfg = dict(DEFAULT_CONFIG)
-    cfg.update(json.loads(CONFIG_FILE.read_text(encoding='utf-8')))
+    if CONFIG_FILE.exists():
+        cfg.update(json.loads(CONFIG_FILE.read_text(encoding='utf-8')))
+    elif not os.environ.get('SHEET_SYNC_PLANILHA_ID'):
+        raise SyncError(f'Configuração ausente: {CONFIG_FILE}')
+    for name, key in ENV_CONFIG.items():
+        if os.environ.get(name):
+            cfg[key] = os.environ[name].strip()
     cfg['service_role_key'] = cfg.get('service_role_key') or os.environ.get('SECAP_SERVICE_ROLE_KEY', '')
     for key in ('planilha_id', 'projeto_id'):
         if not cfg.get(key):
@@ -372,13 +385,49 @@ def load_config() -> dict:
     return cfg
 
 
-def load_state(cfg) -> dict:
-    if STATE_FILE.exists():
+def state_key(cfg) -> str:
+    return f"{cfg['planilha_id']}|{cfg['projeto_id']}"
+
+
+def _db_state_missing(exc) -> bool:
+    """True se as funções de estado no banco ainda não foram instaladas (sheet_sync_cloud.sql)."""
+    text = str(exc)
+    return 'secap_sheet_sync_' in text and ('PGRST202' in text or 'respondeu 404' in text)
+
+
+def load_state(cfg, portal=None) -> dict:
+    empty = {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'], 'base': None}
+    state = None
+    if portal is not None:
+        try:
+            state = portal.rpc('secap_sheet_sync_state_get', {'p_key': state_key(cfg)}) or None
+        except SyncError as exc:
+            if not _db_state_missing(exc):
+                raise
+    # Banco ainda sem estado (ou sem as funções): usa o arquivo local, se houver.
+    if not state and STATE_FILE.exists():
         state = json.loads(STATE_FILE.read_text(encoding='utf-8'))
-        # Base de outra planilha/projeto não serve: recomeça como primeira sincronia.
-        if state.get('planilha_id') == cfg['planilha_id'] and state.get('projeto_id') == cfg['projeto_id']:
-            return state
-    return {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'], 'base': None}
+    # Base de outra planilha/projeto não serve: recomeça como primeira sincronia.
+    if state and state.get('planilha_id') == cfg['planilha_id'] and state.get('projeto_id') == cfg['projeto_id']:
+        return state
+    return empty
+
+
+def save_state(cfg, portal, payload) -> None:
+    """Grava a base no banco (compartilhada com a Vercel) e, quando possível, no arquivo local."""
+    saved = False
+    if portal is not None:
+        try:
+            portal.rpc('secap_sheet_sync_state_put', {'p_key': state_key(cfg), 'p_body': payload})
+            saved = True
+        except SyncError as exc:
+            if not _db_state_missing(exc):
+                raise
+    try:
+        write_json(STATE_FILE, payload)
+    except OSError:
+        if not saved:
+            raise
 
 
 def match_field(header, fields):
@@ -418,7 +467,9 @@ def detect_layout(sheets, fields, wanted_title, id_field):
 class Cycle:
     def __init__(self, cfg, sheets=None, portal=None, dry_run=False):
         self.cfg = cfg
-        self.sheets = sheets or GoogleSheets(ROOT / cfg['credenciais'], cfg['planilha_id'])
+        info = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+        self.sheets = sheets or GoogleSheets(ROOT / cfg['credenciais'], cfg['planilha_id'],
+                                             json.loads(info) if info else None)
         self.portal = portal or Portal(cfg['supabase_url'], cfg['service_role_key'])
         self.dry_run = dry_run
         self.report = {'inicio': dt.datetime.now().isoformat(timespec='seconds'), 'avisos': [], 'conflitos': [],
@@ -490,7 +541,7 @@ class Cycle:
         if no_key:
             self.warn(f'{no_key} obra(s) do portal sem ID não são sincronizadas.')
 
-        state = load_state(cfg)
+        state = load_state(cfg, self.portal)
         base = state.get('base')
         first = base is None
         mode = 'relatorio' if self.dry_run else (cfg['primeira_sincronia'] if first else None)
@@ -594,15 +645,15 @@ class Cycle:
         if updates or inserts:
             res = self.portal.apply(cfg['projeto_id'], list(updates.values()), inserts, f'Planilha Google · {title}')
             self.report['resultado_portal'] = res
-        write_json(STATE_FILE, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
-                                'aba': title, 'base': new_base})
+        save_state(cfg, self.portal, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
+                                      'aba': title, 'base': new_base})
         self.sheets.write_cells(cell_writes)
         self.sheets.append_rows(title, appends)
         for key, vals in pending_sheet.items():
             new_base.setdefault(key, {}).update(vals)
-        write_json(STATE_FILE, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
-                                'aba': title, 'base': new_base,
-                                'ultima_sincronia': dt.datetime.now().isoformat(timespec='seconds')})
+        save_state(cfg, self.portal, {'planilha_id': cfg['planilha_id'], 'projeto_id': cfg['projeto_id'],
+                                      'aba': title, 'base': new_base,
+                                      'ultima_sincronia': dt.datetime.now().isoformat(timespec='seconds')})
         self.report['modo'] = 'primeira sincronia (' + mode + ' prevalece)' if first else 'sincronia'
         return self.report
 
@@ -613,12 +664,39 @@ STATUS = {'ativo': False, 'ultima_execucao': None, 'ultimo_erro': None, 'resumo'
 _lock = threading.Lock()
 
 
+LOCK_OWNER = ('vercel-' if os.environ.get('VERCEL') else 'local-') + uuid.uuid4().hex[:8]
+
+
 def run_once(dry_run=False, sheets=None, portal=None):
     with _lock:
         cfg = load_config()
-        report = Cycle(cfg, sheets, portal, dry_run).run()
+        cycle = Cycle(cfg, sheets, portal, dry_run)
+        key, locked = state_key(cfg), False
+        if not dry_run:
+            # Trava no banco: a Vercel e o portal local nunca sincronizam ao mesmo tempo.
+            try:
+                locked = bool(cycle.portal.rpc('secap_sheet_sync_lock',
+                                               {'p_key': key, 'p_owner': LOCK_OWNER, 'p_seconds': 240}))
+                if not locked:
+                    return {'modo': 'ignorado: outra sincronia em andamento', 'fim': None, 'avisos': [],
+                            'conflitos': [], 'planilha_para_portal': 0, 'portal_para_planilha': 0,
+                            'obras_criadas_no_portal': 0, 'linhas_criadas_na_planilha': 0, 'ignorado': True}
+            except SyncError as exc:
+                if not _db_state_missing(exc):
+                    raise
+        try:
+            report = cycle.run()
+        finally:
+            if locked:
+                try:
+                    cycle.portal.rpc('secap_sheet_sync_unlock', {'p_key': key, 'p_owner': LOCK_OWNER})
+                except SyncError:
+                    pass  # a trava expira sozinha
         report['fim'] = dt.datetime.now().isoformat(timespec='seconds')
-        write_json(REPORT_FILE, report)
+        try:
+            write_json(REPORT_FILE, report)
+        except OSError:
+            pass  # na Vercel não há pasta data/ gravável
         return report
 
 
