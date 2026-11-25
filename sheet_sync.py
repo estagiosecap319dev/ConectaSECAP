@@ -391,6 +391,27 @@ def load_config() -> dict:
     return cfg
 
 
+def credentials_from_env():
+    """Credencial do Google em GOOGLE_SERVICE_ACCOUNT_JSON (Vercel). None = usa o arquivo local."""
+    raw = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+    if raw is None:
+        return None
+    text = raw.strip().lstrip('﻿')
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in '\'"':
+        text = text[1:-1].strip()  # colado entre aspas
+    try:
+        info = json.loads(text)
+    except ValueError:
+        start = 'vazia' if not text else f'começa com "{text[:1]}"'
+        raise SyncError('GOOGLE_SERVICE_ACCOUNT_JSON não é um JSON válido '
+                        f'({start}, {len(text)} caracteres). Cole o conteúdo inteiro de '
+                        'data/google-service-account.json, começando em { e terminando em }.') from None
+    if not isinstance(info, dict) or not info.get('client_email') or not info.get('private_key'):
+        raise SyncError('GOOGLE_SERVICE_ACCOUNT_JSON não tem client_email/private_key: '
+                        'confira se é o JSON da conta de serviço.')
+    return info
+
+
 def state_key(cfg) -> str:
     return f"{cfg['planilha_id']}|{cfg['projeto_id']}"
 
@@ -475,9 +496,7 @@ def detect_layout(sheets, fields, wanted_title, id_field):
 class Cycle:
     def __init__(self, cfg, sheets=None, portal=None, dry_run=False):
         self.cfg = cfg
-        info = os.environ.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-        self.sheets = sheets or GoogleSheets(ROOT / cfg['credenciais'], cfg['planilha_id'],
-                                             json.loads(info) if info else None)
+        self.sheets = sheets or GoogleSheets(ROOT / cfg['credenciais'], cfg['planilha_id'], credentials_from_env())
         self.portal = portal or Portal(cfg['supabase_url'], cfg['service_role_key'])
         self.dry_run = dry_run
         self.report = {'inicio': dt.datetime.now().isoformat(timespec='seconds'), 'avisos': [], 'conflitos': [],
