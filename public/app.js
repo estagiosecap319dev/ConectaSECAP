@@ -4576,11 +4576,25 @@ async function runImport() {
 
     if (!imported.length) throw Error('Nenhuma obra válida foi encontrada.');
 
-    const report = planRecordImport(
+    let report = planRecordImport(
       p.records,
       imported,
       fieldMapping.map((m) => m.fieldId)
     );
+    if (sheetLink) {
+      const idFieldForImport = sheetIdField(p);
+      if (idFieldForImport && fieldMapping.some((m) => m.fieldId === idFieldForImport.id)) {
+        const known = new Set(
+          p.records.map((r) => String(r[idFieldForImport.id] ?? '').trim()).filter(Boolean)
+        );
+        const repeated = report.added.filter((r) => known.has(String(r[idFieldForImport.id] ?? '').trim()));
+        if (repeated.length)
+          report = {
+            added: report.added.filter((r) => !repeated.includes(r)),
+            existing: report.existing + repeated.length,
+          };
+      }
+    }
     const sameNames = new Map();
     [...p.records, ...report.added].forEach((r) => {
       const name = String(r.nome || '')
@@ -4591,9 +4605,7 @@ async function runImport() {
     const repeatedNames = [...sameNames.values()].filter((n) => n > 1).length;
     const planilhaId = uid();
     if (sheetLink) {
-      const idField = p.fields.find(
-        (f) => f.id === 'codigo' || ['id', 'codigo', 'cod', 'codigodaobra', 'iddaobra', 'idobra'].includes(importHeaderKey(f.name))
-      );
+      const idField = sheetIdField(p);
       sheetLink.campoId = idField && fieldMapping.some((m) => m.fieldId === idField.id) ? idField.id : '';
       sheetLink.campoNome = idField?.name || '';
     }
@@ -4654,6 +4666,67 @@ async function loadSheetSyncAccount() {
   }
 }
 // ----------------------------------------------------------------- sincronia com a planilha do projeto
+// Campo que identifica cada obra (coluna ID da planilha).
+function sheetIdField(p) {
+  return (p?.fields || []).find(
+    (f) => f.id === 'codigo' || ['id', 'codigo', 'cod', 'codigodaobra', 'iddaobra', 'idobra'].includes(importHeaderKey(f.name))
+  );
+}
+function openConnectSheet(pid) {
+  const p = sheetSyncProject(pid);
+  if (!p || !canEdit(p)) return;
+  const idField = sheetIdField(p);
+  modal(
+    'Conectar a uma planilha Google',
+    `<form id="connectSheetForm" onsubmit="event.preventDefault();connectSheet('${esc(pid)}')">
+      <p>O projeto <strong>${esc(p.name)}</strong> passa a ser sincronizado com a planilha: o que mudar no portal é gravado nela e o que mudar nela volta para o portal, a cada poucos minutos. Nenhuma obra é importada ou duplicada agora.</p>
+      ${idField ? `<p>As linhas são ligadas às obras pela coluna <b>${esc(idField.name)}</b>, que precisa existir na planilha com os mesmos códigos.</p>` : '<div class="summary-strip"><p><strong>Este projeto não tem um campo ID.</strong> A sincronia precisa de um código único de cada obra, igual na planilha e no portal.</p></div>'}
+      <div class="field"><label>Link da planilha do Google Sheets *</label><input name="url" required placeholder="https://docs.google.com/spreadsheets/d/..." ${idField ? '' : 'disabled'}></div>
+      <p><strong>Obrigatório:</strong> no Google Sheets, clique em <em>Compartilhar</em> e adicione como <b>Editor</b> o e-mail <code id="sheetSyncAccount">carregando…</code>.</p>
+      <p class="subtitle">Na primeira sincronia, se um valor estiver diferente entre o portal e a planilha, vale o do portal. Células com fórmula na planilha nunca são sobrescritas, e exclusões não são propagadas.</p>
+    </form>`,
+    btn('Cancelar', 'closeModal()', 'close') +
+      (idField ? '<button class="btn primary" type="submit" form="connectSheetForm">Conectar planilha</button>' : '')
+  );
+  loadSheetSyncAccount();
+}
+async function connectSheet(pid) {
+  const p = sheetSyncProject(pid), form = document.getElementById('connectSheetForm');
+  if (!p || !form || !canEdit(p)) return;
+  const idField = sheetIdField(p), url = String(new FormData(form).get('url') || '').trim();
+  const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!match) return notify('Use o link de uma planilha do Google Sheets (docs.google.com/spreadsheets/d/...).');
+  if (!idField) return notify('Este projeto não tem um campo ID para ligar as linhas às obras.');
+  const button = document.querySelector('#modal .dialogfoot .btn.primary');
+  if (button) button.disabled = true;
+  // Confere se a planilha tem a coluna ID (lida pelo link público, igual à importação).
+  try {
+    const response = await fetch(driveCsvUrl(url));
+    const text = response.ok ? await response.text() : '';
+    if (text && !/<!doctype html|<html/i.test(text)) {
+      const headers = (parseCSV(text.replace(/^\uFEFF/, ''))[0] || []).map(importHeaderKey);
+      if (!headers.includes(importHeaderKey(idField.name))) {
+        if (button) button.disabled = false;
+        return notify(`A planilha não tem a coluna "${idField.name}". Confira o link ou inclua essa coluna.`);
+      }
+    }
+  } catch (e) {
+    // Planilha não pública: a conferência fica para a sincronia do servidor (que usa a conta de serviço).
+  }
+  p.sheetSync = {
+    ativo: true,
+    planilhaId: match[1],
+    url,
+    aba: '',
+    campoId: idField.id,
+    conectadoEm: new Date().toISOString(),
+    conectadoPor: me()?.name || '',
+  };
+  persist('Conectou planilha', p, '', url);
+  closeModal();
+  render();
+  notify('Planilha conectada. A primeira sincronia acontece em até 5 minutos.');
+}
 // Estado da conexão, pausar/retomar e desconectar. Quem grava na planilha é o servidor (sheet_sync.py).
 function sheetSyncProject(pid) {return db.projects.find((x) => x.id === pid);}
 function openSheetSyncPanel(pid) {
@@ -4715,7 +4788,7 @@ function confirmDisconnectSheet(pid) {
   if (!p?.sheetSync) return;
   modal(
     'Desconectar a planilha?',
-    `<p>O projeto <strong>${esc(p.name)}</strong> deixa de ser sincronizado com a planilha.</p><p class="subtitle">As obras do portal e os dados da planilha continuam como estão: nada é apagado. Para conectar de novo, importe pelo link da planilha e marque a opção de manter sincronizado.</p>`,
+    `<p>O projeto <strong>${esc(p.name)}</strong> deixa de ser sincronizado com a planilha.</p><p class="subtitle">As obras do portal e os dados da planilha continuam como estão: nada é apagado. Para conectar de novo, use "Conectar a uma planilha" em Editar projeto.</p>`,
     btn('Cancelar', `openSheetSyncPanel('${esc(pid)}')`, 'arrow') + btn('Desconectar', `disconnectSheet('${esc(pid)}')`, 'trash', 'primary')
   );
 }
@@ -4734,7 +4807,15 @@ const editProjectBeforeSheetSync = editProject;
 editProject = function (id = '') {
   editProjectBeforeSheetSync(id);
   const p = id && sheetSyncProject(id), s = p?.sheetSync, form = document.getElementById('projectForm');
-  if (!s || !form) return;
+  if (!p || !form || p.externalUrl) return;
+  if (!s) {
+    if (canEdit(p))
+      form.insertAdjacentHTML(
+        'afterbegin',
+        `<div class="summary-strip" style="text-align:left;margin-bottom:16px"><p style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%"><span><strong>Planilha Google</strong><br><small>Mantenha as obras deste projeto sincronizadas com uma planilha do Google Sheets.</small></span><button type="button" class="btn secondary small" onclick="openConnectSheet('${esc(id)}')">Conectar a uma planilha</button></p></div>`
+      );
+    return;
+  }
   form.insertAdjacentHTML(
     'afterbegin',
     `<div class="summary-strip" style="text-align:left;margin-bottom:16px;border-left:4px solid ${s.ativo ? '#268c48' : '#d97706'}"><p style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%"><span><strong>Planilha Google ${s.ativo ? 'sincronizada' : 'conectada (pausada)'}</strong><br><small>As mudanças do portal ${s.ativo ? 'são gravadas' : 'não estão sendo gravadas'} na planilha do link.</small></span><button type="button" class="btn secondary small" onclick="openSheetSyncPanel('${esc(id)}')">Ver sincronia</button></p></div>`
