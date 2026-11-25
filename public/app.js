@@ -3696,7 +3696,7 @@ function inputField(f, value, disabled) {
     : f.type === 'date'
       ? '<small>Aparece automaticamente no calendário.</small>'
       : f.type === 'currency'
-        ? '<small>Valor em reais. Use vírgula para os centavos (ex.: 1.250,50).</small>'
+        ? '<small>Digite só os números: os centavos entram primeiro (ex.: 125050 = 1.250,50).</small>'
         : '';
   return `<div class="field"><label>${esc(f.name)}${f.required ? ' *' : ''}</label>${input}${help}</div>`;
 }
@@ -3726,25 +3726,38 @@ function currencyHiddenFor(el) {
   const form = el.form || el.closest('form') || document;
   return [...form.querySelectorAll('input[type="hidden"]')].find((h) => h.name === el.dataset.currencyFor);
 }
-// Enquanto digita: atualiza o número escondido. Ao sair do campo: formata em R$.
+// Máscara de valor, como em app de banco: ao digitar, os números entram pelos centavos
+// (1 → 0,01 · 12 → 0,12 · 12212 → 122,12 · 1221200 → 12.212,00). Apagar tira o último dígito.
+// Colar (ou preencher automaticamente) um valor pronto, como "1.519.076,06" ou "2500", mantém
+// o valor colado. Um "-" em qualquer posição deixa o valor negativo.
+const CURRENCY_MAX_DIGITS = 15;
+function currencyFormat(n) {
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function currencyMaskValue(text) {
+  const digits = String(text ?? '').replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, CURRENCY_MAX_DIGITS);
+  if (!digits || /^0*$/.test(digits)) return digits ? 0 : null;
+  const n = Number(digits) / 100;
+  return String(text).includes('-') ? -n : n;
+}
 document.addEventListener('input', (e) => {
   const el = e.target;
-  if (!el.matches?.('.currency-input')) return;
+  if (!el.matches?.('.currency-input') || el.readOnly) return;
   const hidden = currencyHiddenFor(el);
   if (!hidden) return;
-  const text = el.value.trim();
-  const n = parseCurrencyInput(text);
-  const ok = text === '' || n !== null;
-  el.setAttribute('aria-invalid', ok ? 'false' : 'true');
-  el.setCustomValidity(ok ? '' : 'Valor inválido. Use o formato 1.250,50.');
-  if (ok) {
-    // Sem alteração real, mantém o texto original (evita marcar "alterado" à toa).
-    const original = hidden.dataset.originalValue ?? '';
-    const same = text === '' ? original === '' : parseCurrencyInput(original) === n;
-    hidden.value = same ? original : text === '' ? '' : String(n);
-    hidden.dispatchEvent(new Event('input', { bubbles: true }));
-    hidden.dispatchEvent(new Event('change', { bubbles: true }));
-  }
+  const typed = typeof e.inputType === 'string' && !['insertFromPaste', 'insertFromDrop', 'insertReplacementText'].includes(e.inputType);
+  let n = typed ? undefined : parseCurrencyInput(el.value);
+  if (n === undefined || n === null) n = currencyMaskValue(el.value);
+  el.value = n === null ? '' : currencyFormat(n);
+  if (document.activeElement === el) el.setSelectionRange(el.value.length, el.value.length);
+  el.setAttribute('aria-invalid', 'false');
+  el.setCustomValidity('');
+  // Sem alteração real, mantém o texto original (evita marcar "alterado" à toa).
+  const original = hidden.dataset.originalValue ?? '';
+  const same = n === null ? original === '' : original !== '' && parseCurrencyInput(original) === n;
+  hidden.value = same ? original : n === null ? '' : String(n);
+  hidden.dispatchEvent(new Event('input', { bubbles: true }));
+  hidden.dispatchEvent(new Event('change', { bubbles: true }));
 });
 document.addEventListener(
   'blur',
