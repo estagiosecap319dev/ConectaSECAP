@@ -1156,3 +1156,22 @@ body.menu-collapsed .sidebar-resizer {
   border-color: #c2410c !important;
   outline-color: #c2410c;
 }
+
+/* Fórmulas do módulo financeiro: campo calculado (sem digitação). */
+.field[data-fin-computed] .currency-input[readonly] {
+  background: #eef4f7 !important;
+  border-style: dashed !important;
+  color: #1f3f52;
+  cursor: default;
+}
+#recordForm .field[data-fin-computed] > label::after,
+.field[data-fin-computed] > label::after {
+  content: " · calculado" !important;
+  font-weight: 600 !important;
+  font-size: 0.85em;
+  color: #1f6f9a !important;
+}
+#recordForm .edit-cards-grid .field[data-fin-computed] {
+  background: #f5f9fb !important;
+  border-left: 5px solid #8fb6cc !important;
+}

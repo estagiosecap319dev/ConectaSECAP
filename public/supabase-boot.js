@@ -35,6 +35,7 @@ const APP_SCRIPTS = [
   'sidebar-resize.js',
   'record-field-search.js',
   'weekly-summary.js',
+  'finance-formulas.js',
 ];
 
 function showBootError(message) {
