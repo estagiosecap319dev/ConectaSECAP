@@ -75,9 +75,24 @@
     );
   }
 
+  // Projeto escolhido na Visão geral ('' = todos os projetos liberados). Preferência do navegador.
+  var DASH_PROJECT_KEY='secap-dash-project';
+  function dashAllProjects(){return (typeof visible==='function'?visible():db.projects||[]);}
+  function dashProjectId(){
+    var id='';try{id=localStorage.getItem(DASH_PROJECT_KEY)||''}catch(e){}
+    return dashAllProjects().some(function(p){return String(p.id)===id})?id:'';
+  }
+  function dashProjects(){var id=dashProjectId(),all=dashAllProjects();return id?all.filter(function(p){return String(p.id)===id}):all;}
+  window.setDashProject=function(id){try{if(id)localStorage.setItem(DASH_PROJECT_KEY,id);else localStorage.removeItem(DASH_PROJECT_KEY)}catch(e){}render();};
+  function dashProjectPicker(){
+    var all=dashAllProjects();if(all.length<2)return '';var id=dashProjectId();
+    return '<label class="dash-project-picker"><span>Projeto</span><select aria-label="Projeto exibido na visão geral" onchange="setDashProject(this.value)"><option value="">Todos os projetos ('+all.length+')</option>'+
+      all.map(function(p){return '<option value="'+esc(p.id)+'"'+(String(p.id)===id?' selected':'')+'>'+esc(p.name||'Projeto')+'</option>'}).join('')+'</select></label>';
+  }
+
   window.dashboard = function () {
     var generation=++renderGeneration;
-    var projects = (typeof visible==='function'?visible():db.projects||[]);
+    var projects = dashProjects();
     var all = rowsOf(projects).map(info);
     var active = all.filter(function (i) {
       return !i.cancelled;
@@ -183,7 +198,8 @@
       head(
         'PORTAL SECAP · ' + d.toUpperCase(),
         'Visão geral',
-        'Indicadores, obras que exigem atenção e próximas entregas em um só lugar.'
+        dashProjectId()?'Indicadores, obras que exigem atenção e próximas entregas de <b>'+esc(projects[0].name||'Projeto')+'</b>.':'Indicadores, obras que exigem atenção e próximas entregas em um só lugar.',
+        dashProjectPicker()
       ) +
       
       '<div class="overview-balanced">'+
@@ -206,8 +222,8 @@
   function needsAttention(i){return !i.finished&&!i.cancelled&&(i.idle||i.late||i.paralyzed||i.attention);}
   function upcomingWorks(all){return all.filter(function(i){var assessed=overviewDeadline(i.x.r,i.x.p);var remaining=assessed.valid?daysLeft(assessed.date):null;return !i.finished&&!i.cancelled&&remaining!==null&&remaining>=0&&remaining<=30;}).sort(function(a,b){return daysLeft(overviewDeadline(a.x.r,a.x.p).date)-daysLeft(overviewDeadline(b.x.r,b.x.p).date);});}
   function deliveryRow(i){return '<li><div><button type="button" class="balanced-obra-link" onclick="editRecord(\''+esc(i.x.p.id)+'\',\''+esc(i.x.r.id)+'\')">'+esc(i.title)+'</button><small>'+esc(i.x.p.name)+' · '+esc(i.x.r.proxima||'Prazo de entrega da obra')+'</small></div><span class="balanced-delivery-date">'+icon('calendar')+esc(date(val(i.x.r,i.x.p,'deadline')))+'</span></li>';}
-  window.dashUpcoming=function(){var all=rowsOf(typeof visible==='function'?visible():db.projects||[]).map(info);var upcoming=upcomingWorks(all);modal('Próximas entregas · 30 dias','<ul class="balanced-deliveries">'+upcoming.map(deliveryRow).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
-  window.dashStatusWorks=function(status){var list=rowsOf(typeof visible==='function'?visible():db.projects||[]).map(info).filter(function(i){return i.status===status});modal('Obras · '+status,'<ul class="balanced-deliveries">'+list.map(function(i){return '<li><div><b>'+esc(i.title)+'</b><small>'+esc(i.x.p.name)+'</small></div>'+openBtn(i.x.p.id,i.x.r.id)+'</li>'}).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
+  window.dashUpcoming=function(){var all=rowsOf(dashProjects()).map(info);var upcoming=upcomingWorks(all);modal('Próximas entregas · 30 dias','<ul class="balanced-deliveries">'+upcoming.map(deliveryRow).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
+  window.dashStatusWorks=function(status){var list=rowsOf(dashProjects()).map(info).filter(function(i){return i.status===status});modal('Obras · '+status,'<ul class="balanced-deliveries">'+list.map(function(i){return '<li><div><b>'+esc(i.title)+'</b><small>'+esc(i.x.p.name)+'</small></div>'+openBtn(i.x.p.id,i.x.r.id)+'</li>'}).join('')+'</ul>','<button class="btn" onclick="closeModal()">Fechar</button>');};
 
   function openBtn(pid,rid){return '<button type="button" class="btn" onclick="editRecord(\''+esc(pid)+"','"+esc(rid)+'\')">Abrir '+icon('arrow')+'</button>'}
 
@@ -498,7 +514,7 @@
 
   /* lista aberta ao clicar num indicador */
   window.dashOpen = function (kind) {
-    var projects = (typeof visible==='function'?visible():db.projects||[]);
+    var projects = dashProjects();
     var all = rowsOf(projects).map(info);
     var f = {
       attention:[needsAttention,'Obras que precisam de atenção'],
