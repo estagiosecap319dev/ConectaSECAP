@@ -407,6 +407,8 @@ def load_state(cfg, portal=None) -> dict:
     if portal is not None:
         try:
             state = portal.rpc('secap_sheet_sync_state_get', {'p_key': state_key(cfg)}) or None
+            if state and state.get('base') is not None:
+                state['_no_banco'] = True  # marca de memória: não é gravada (save_state recebe outro dict)
         except SyncError as exc:
             if not _db_state_missing(exc):
                 raise
@@ -649,7 +651,7 @@ class Cycle:
 
         # Nada a gravar em lado nenhum e base igual: não regrava o estado (economiza banco).
         if not (updates or inserts or cell_writes or appends) and not first and new_base == base \
-                and state.get('aba') == title:
+                and state.get('aba') == title and state.get('_no_banco'):
             self.report['modo'] = 'sincronia (sem mudanças)'
             return self.report
 
