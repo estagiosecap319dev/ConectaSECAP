@@ -81,10 +81,17 @@ function overviewFinancePanel(projects) {
   const amount=items=>items.length?money(items.reduce((a,i)=>a+i.value,0)):'Não informado';
   return `<section class="panel overview-finance-panel"><div class="panelhead"><div><h2>Financeiro com origem identificada</h2><small>Obras não canceladas. Valores atípicos permanecem no total até revisão.</small></div><button class="textbtn" onclick="openOverviewMappings()">Ver colunas de origem</button></div><div class="overview-finance-grid"><div><small>Valor previsto</small><strong>${amount(b.map(i=>({value:i.budget})))}</strong><span>${b.length} de ${active.length} obras com valor informado</span></div><div><small>Valor executado</small><strong>${amount(s.map(i=>({value:i.spent})))}</strong><span>${s.length} de ${active.length} obras com valor informado</span></div></div></section>`;
 }
+// Cor da barra: cores muito claras da paleta (ex.: "Não iniciado" #F2F2F2) somem no fundo da trilha;
+// nesses casos a barra usa um cinza visível. A paleta das etiquetas não muda.
+function overviewBarColor(name) {
+  const c=statusColor(name);if(!/^#[a-f0-9]{6}$/i.test(c))return '#7694a5';
+  const [r,g,b]=[1,3,5].map(i=>parseInt(c.slice(i,i+2),16)/255);
+  return 0.2126*r+0.7152*g+0.0722*b>0.8?'#b8c4ce':c;
+}
 function overviewStatusPanel(all) {
   const counts=new Map();for(const i of all){const name=i.status||'Não informado';counts.set(name,(counts.get(name)||0)+1);}
   const values=[...counts].sort((a,b)=>b[1]-a[1]),max=Math.max(1,...values.map(x=>x[1]));
-  return `<section class="panel balanced-status overview-status-panel"><div class="panelhead"><div><h2>Situação das obras</h2><small>Quantidade por situação. Clique para consultar as obras.</small></div></div><div class="panelbody">${values.map(([name,count])=>`<button class="overview-status-row" data-status="${esc(name)}" onclick="dashStatusWorks(this.dataset.status)"><span>${esc(name)}</span><span class="overview-status-track"><i style="width:${count/max*100}%;background:${/^#[a-f0-9]{6}$/i.test(statusColor(name))?statusColor(name):'#7694a5'}"></i></span><b>${count}</b></button>`).join('')||'<p>Nenhuma obra nesta seleção.</p>'}<small class="overview-status-total">${all.length} obras nesta visão · nenhuma situação omitida</small></div></section>`;
+  return `<section class="panel balanced-status overview-status-panel"><div class="panelhead"><div><h2>Situação das obras</h2><small>Quantidade por situação. Clique para consultar as obras.</small></div></div><div class="panelbody">${values.map(([name,count])=>`<button class="overview-status-row" data-status="${esc(name)}" onclick="dashStatusWorks(this.dataset.status)"><span>${esc(name)}</span><span class="overview-status-track"><i style="width:${count/max*100}%;background:${overviewBarColor(name)}"></i></span><b>${count}</b></button>`).join('')||'<p>Nenhuma obra nesta seleção.</p>'}<small class="overview-status-total">${all.length} obras nesta visão · nenhuma situação omitida</small></div></section>`;
 }
 // Campos de mesmo nome em projetos diferentes: os IDs originais são preservados.
 function overviewCommonColumns(projects) {
