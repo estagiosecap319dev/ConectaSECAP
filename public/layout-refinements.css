@@ -1404,3 +1404,4 @@ body.menu-collapsed .sidebar-resizer {
 .md-all { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; font: inherit; font-size: 13px; font-weight: 600; color: #002f47; background: #fff; border: 1px solid #b9c9d3; border-radius: 9px; cursor: pointer; }
 .md-all:hover { border-color: #002f47; background: #f3f7f9; }
 .md-all svg { width: 15px; height: 15px; }
+.admin-bell-kind.is-reuniao { background: #fff1e6; color: #c2550c; }

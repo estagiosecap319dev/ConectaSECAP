@@ -1,7 +1,7 @@
 /* ============================================================================
    SECAP · SINO DE NOTIFICAÇÕES
-   O sino do cabeçalho reúne as notificações semanais (obras sem edição), com
-   contador de não lidas.
+   O sino do cabeçalho reúne as notificações semanais (obras sem edição) e os
+   convites de reunião da agenda (meeting_notify.sql), com contador de não lidas.
    · Administradores veem as notificações de todas as contas
      (secap_admin_notifications / secap_admin_notifications_seen — admin_notifications.sql).
    · Usuários veem só as próprias
@@ -118,13 +118,19 @@ function renderAdminBellPanel() {
   const items = d?.items || [];
   const admin = bellIsAdmin();
   // Administrador vê quem foi notificado e o status do e-mail; o usuário vê só as próprias obras.
+  // Reuniões (type "reuniao"): convite recebido na agenda; demais: notificação semanal de obras.
+  const isMeeting = (n) => n.type === 'reuniao';
   const itemTitle = (n) =>
-    admin
-      ? `${esc(n.name || n.email)} · ${n.total} obra(s) sem edição`
-      : `${n.total} obra(s) sua(s) sem atualização`;
+    isMeeting(n)
+      ? `${n.kind === 'alterada' ? 'Reunião alterada' : 'Nova reunião'}: ${esc(n.title || 'sem título')}`
+      : admin
+        ? `${esc(n.name || n.email)} · ${n.total} obra(s) sem edição`
+        : `${n.total} obra(s) sua(s) sem atualização`;
   const itemInfo = (n) =>
-    `Semana ${esc(adminBellDate(n.weekStart))} a ${esc(adminBellDate(n.weekEnd))}` +
-    (admin ? ` · ${esc(adminBellStatus(n.status))}` : '');
+    isMeeting(n)
+      ? `${esc(adminBellDate(n.date))}${n.time ? ` às ${esc(String(n.time).slice(0, 5))}` : ''}${n.organizer ? ` · marcada por ${esc(n.organizer)}` : ''}`
+      : `Semana ${esc(adminBellDate(n.weekStart))} a ${esc(adminBellDate(n.weekEnd))}` +
+        (admin ? ` · ${esc(adminBellStatus(n.status))}` : '');
   const body = adminBell.error
     ? `<p class="admin-bell-empty" role="alert">${esc(adminBell.error)}</p>`
     : !d
@@ -133,7 +139,7 @@ function renderAdminBellPanel() {
         ? `<ul class="admin-bell-list">${items
             .map(
               (n, i) => `<li><button type="button" class="admin-bell-item ${n.unread ? 'is-unread' : ''}" onclick="openAdminBellItem(${i})">
-                <span class="admin-bell-kind is-${esc(admin ? n.status : 'enviado')}" aria-hidden="true">${icon('bell')}</span>
+                <span class="admin-bell-kind is-${esc(isMeeting(n) ? 'reuniao' : admin ? n.status : 'enviado')}" aria-hidden="true">${icon(isMeeting(n) ? 'calendar' : 'bell')}</span>
                 <span class="admin-bell-text"><strong>${itemTitle(n)}</strong>
                 <small>${itemInfo(n)}</small>
                 <small>${esc(new Date(n.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}${n.unread ? ' · <b class="admin-bell-new">Nova</b>' : ''}</small></span>
@@ -152,6 +158,12 @@ function openAdminBellItem(index) {
   const n = adminBell.data?.items?.[index];
   if (!n) return;
   closeAdminBell();
+  if (n.type === 'reuniao') {
+    // Abre a agenda no dia da reunião.
+    go('calendar');
+    if (n.date && typeof openAgendaDay === 'function') setTimeout(() => openAgendaDay(String(n.date).slice(0, 10)), 50);
+    return;
+  }
   const obras = Array.isArray(n.obras) ? n.obras : [];
   if (!bellIsAdmin()) {
     modal(

@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import access_request_notify  # noqa: E402
+import meeting_notify  # noqa: E402
 import weekly_notify  # noqa: E402
 
 
@@ -43,6 +44,12 @@ class handler(BaseHTTPRequestHandler):
             if not weekly_notify.load_config()['smtp'].get('host'):
                 return self._send(500, {'erro': 'SMTP_HOST não configurado; nenhum e-mail foi enviado.'})
             summary = access_request_notify.run(origin)
+            # Agendamento diário (GET): também envia avisos de reunião que tenham ficado pendentes.
+            if origin.startswith('automático (Vercel Cron)'):
+                try:
+                    summary['reunioes'] = meeting_notify.run(origin)
+                except Exception as exc:  # noqa: BLE001 - não atrapalha o aviso de acesso
+                    print('[reunião] Erro:', exc, flush=True)
         except Exception as exc:  # noqa: BLE001 - devolve o erro para o log da Vercel
             print('[solicitação de acesso] Erro:', exc, flush=True)
             return self._send(500, {'erro': str(exc)[:500]})
