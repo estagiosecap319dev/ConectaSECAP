@@ -1,12 +1,14 @@
-/* records-cards.js — alternância Tabela / Cards na lista de obras de cada projeto. */
+/* records-cards.js — formatos da lista de obras de cada projeto: Master-detail / Tabela / Cards. */
 (function () {
   'use strict';
-  var KEY = 'secap-records-view';
-  window.recordsView = 'table';
-  try { if (localStorage.getItem(KEY) === 'cards') window.recordsView = 'cards'; } catch (e) {}
+  // Nova chave: com a chegada do Master-detail, todos começam nele (a escolha anterior era Tabela/Cards).
+  var KEY = 'secap-records-view-v2';
+  var MODES = ['master', 'table', 'cards'];
+  window.recordsView = 'master';
+  try { var saved = localStorage.getItem(KEY); if (MODES.indexOf(saved) >= 0) window.recordsView = saved; } catch (e) {}
 
   window.setRecordsView = function (mode) {
-    window.recordsView = mode === 'cards' ? 'cards' : 'table';
+    window.recordsView = MODES.indexOf(mode) >= 0 ? mode : 'master';
     try { localStorage.setItem(KEY, window.recordsView); } catch (e) {}
     render();
   };
@@ -15,17 +17,23 @@
   var viewBefore = projectView;
   projectView = function () {
     var html = viewBefore();
-    var on = function (m) { return window.recordsView === m ? ' is-on' : ''; };
+    var button = function (mode, ic, label) {
+      var on = window.recordsView === mode;
+      return '<button type="button" class="' + (on ? 'is-on' : '') + '" aria-pressed="' + on + '" onclick="setRecordsView(\'' + mode + '\')">' + icon(ic) + ' ' + label + '</button>';
+    };
     var toggle =
       '<div class="view-toggle" role="group" aria-label="Formato de exibição das obras">' +
-      '<button type="button" class="' + on('table').trim() + '" aria-pressed="' + (window.recordsView === 'table') + '" onclick="setRecordsView(\'table\')">' + icon('sheet') + ' Tabela</button>' +
-      '<button type="button" class="' + on('cards').trim() + '" aria-pressed="' + (window.recordsView === 'cards') + '" onclick="setRecordsView(\'cards\')">' + icon('dashboard') + ' Cards</button></div>';
+      button('master', 'menu', 'Master-detail') + button('table', 'sheet', 'Tabela') + button('cards', 'dashboard', 'Cards') + '</div>';
     return '<div class="municipal-project-detail">'+html.replace('<h2>Obras e registros</h2>', '<h2>Obras e registros</h2>' + toggle)+'</div>';
   };
 
-  /* 2) quando o formato é "cards", a lista de obras é desenhada como cards */
+  /* 2) "master": lista + detalhe; "cards": cards; "table": tabela */
   var tableBefore = table;
   table = function (rs, limited) {
+    if (window.recordsView === 'master' && !limited && projectId && rs.length) {
+      var mp = visible().find(function (x) { return x.id === projectId; });
+      if (mp) return masterDetail(rs, mp);
+    }
     if (window.recordsView !== 'cards' || limited || !projectId || !rs.length) { const html=tableBefore.apply(this, arguments); return projectId&&!limited?sheetMarkup(html):html; }
     var p = visible().find(function (x) { return x.id === projectId; });
     if (!p) return tableBefore.apply(this, arguments);
@@ -67,4 +75,165 @@
     const chip=badge(status),tint=(/--status-color:([^;"]+)/.exec(chip)||[])[1]||'#0a7cc1';
     return '<article class="rcard municipal-work-card" style="--wc:'+esc(tint)+'" tabindex="0" role="button" aria-label="Abrir '+esc(title)+'" onclick="'+open+'" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();'+open+'}">'+'<div class="work-card-band"><div class="work-card-heading"><h3>'+esc(title)+'</h3></div></div><div class="rc-grid">'+fields.map(([label,value])=>'<div class="rc-item"><span>'+label+'</span><b>'+esc(value)+'</b></div>').join('')+'</div><footer class="rc-foot"><span class="work-card-status">'+chip+'</span><span class="rc-open">Abrir obra'+icon('arrow')+'</span></footer></article>';
   }
+
+  /* ======================================================================
+     3) MASTER-DETAIL: lista de obras à esquerda, detalhe da obra selecionada à direita.
+     Os campos são achados pelo vínculo do painel (BI) ou pelo nome da coluna, porque
+     cada pasta tem códigos próprios (ex.: f_regiao_8c1d).
+     ====================================================================== */
+  var mdSelected = {};
+  function mdKey(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  // Ordem: 1) vínculo configurado no painel do projeto; 2) nome da coluna; 3) reconhecimento automático.
+  function mdField(p, names, semantic) {
+    var fields = p.fields || [];
+    var mapped = semantic && p.biMapping && p.biMapping[semantic];
+    if (mapped) { var m = fields.find(function (x) { return String(x.id) === String(mapped); }); if (m) return m; }
+    for (var i = 0; i < names.length; i++) {
+      var key = names[i];
+      var f = fields.find(function (x) { return String(x.id) === key || mdKey(x.name) === key; });
+      if (f) return f;
+    }
+    if (semantic && typeof biField === 'function') { var b = biField(p, semantic); if (b) return b; }
+    return null;
+  }
+  function mdText(r, f) { var v = f ? r[f.id] : ''; return v == null ? '' : String(v).trim(); }
+  function mdFields(p) {
+    return {
+      id: mdField(p, ['codigo', 'id']),
+      orgao: mdField(p, ['orgao', 'orgaoresponsavel', 'secretaria', 'unidade'], 'agency'),
+      regiao: mdField(p, ['regiao']),
+      etapa: mdField(p, ['etapa', 'macroetapa', 'macroetapaatual'], 'stage'),
+      prioridade: mdField(p, ['prioridade'], 'priority'),
+      sei: mdField(p, ['sei', 'processosei', 'numerosei']),
+      responsavel: mdField(p, ['responsavelacompanhamento', 'responsavel'], 'owner'),
+      tipo: mdField(p, ['tipo', 'tipodeobra', 'tipodaobra', 'tipoprojeto', 'tipodeprojeto']),
+      observacao: mdField(p, ['observacao', 'observacoes', 'notadeacompanhamento', 'obs']),
+      inicio: mdField(p, ['datainicio', 'datainiciodoprojetochegadadademandanasecap', 'previsaoplanejamento', 'inicio'], 'startDate'),
+      fim: mdField(p, ['prazo', 'previsaoencerramento', 'datafim', 'termino'], 'deadline'),
+    };
+  }
+  function mdPriorityChip(value) {
+    var v = String(value || '').trim();
+    if (!v) return '';
+    var k = mdKey(v);
+    var tone = /muitoalta|critic/.test(k) ? 'is-critical' : /alta/.test(k) ? 'is-high' : /media/.test(k) ? 'is-medium' : /baixa/.test(k) ? 'is-low' : 'is-neutral';
+    return '<span class="md-priority ' + tone + '">● ' + esc(v) + '</span>';
+  }
+  function mdMonth(value) {
+    var iso = typeof spreadsheetDate === 'function' ? spreadsheetDate(value) : String(value || '').slice(0, 10);
+    var m = /^(\d{4})-(\d{2})/.exec(iso || '');
+    if (!m) return '';
+    return ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][Number(m[2]) - 1] + '/' + m[1];
+  }
+  function mdCanEditField(p, r, f) {
+    if (!f || !canEdit(p)) return false;
+    if (typeof memberFieldAllowed === 'function' && !memberFieldAllowed(p.id, f.id)) return false;
+    if (typeof canEditSelectedWork === 'function' && !canEditSelectedWork(p.id, r.id)) return false;
+    return true;
+  }
+  function mdListItem(r, p, F, selected) {
+    var stage = mdText(r, F.etapa), stageNum = (/^\s*(\d{1,3})/.exec(stage) || [])[1] || '';
+    var meta = [mdText(r, F.orgao), mdText(r, F.regiao)].filter(Boolean).join(' • ');
+    return '<button type="button" class="md-item' + (selected ? ' is-selected' : '') + '" data-rid="' + esc(r.id) + '" aria-selected="' + selected + '" role="option" onclick="mdSelect(this.closest(\'.md-wrap\').dataset.pid, this.dataset.rid)">' +
+      '<span class="md-item-top"><span class="md-id">ID ' + esc(mdText(r, F.id) || '—') + '</span>' + mdPriorityChip(mdText(r, F.prioridade)) + '</span>' +
+      '<b class="md-item-title">' + esc(recordTitle(r, p)) + '</b>' +
+      '<span class="md-item-foot"><span>' + esc(meta || '—') + '</span>' + (stageNum ? '<span class="md-stage-num" title="' + esc(stage) + '">' + esc(stageNum) + '</span>' : '') + '</span></button>';
+  }
+  function mdDetail(r, p, F) {
+    var cell = function (label, inner, extra) { return '<div class="md-cell' + (extra || '') + '"><small>' + label + '</small>' + inner + '</div>'; };
+    var plain = function (v) { return '<b>' + esc(v || '—') + '</b>'; };
+    var stage = mdText(r, F.etapa), sei = mdText(r, F.sei);
+    var tipoRegiao = [mdText(r, F.tipo), mdText(r, F.regiao)].filter(Boolean).join(' • ');
+    var status = typeof workSituation === 'function' ? workSituation(r, p) : canonicalStatus(val(r, p, 'status'));
+    if (!status || status === 'Não informado') status = 'Ainda não definido';
+    var inicio = mdMonth(F.inicio ? r[F.inicio.id] : ''), fim = mdMonth(F.fim ? r[F.fim.id] : '');
+    var obs = F.observacao, canObs = mdCanEditField(p, r, obs);
+    var obsHtml = obs
+      ? '<div class="md-obs"><div class="md-obs-head"><span>' + icon('edit') + ' ' + esc(obs.name || 'Observação') + '</span><span class="md-obs-state" id="mdObsState">' + (canObs ? '● Salvamento automático ativo' : 'Somente leitura') + '</span></div>' +
+        '<textarea id="mdObs" rows="4" ' + (canObs ? '' : 'readonly') + ' data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" data-original="' + esc(mdText(r, obs)) + '" oninput="mdObsTyping(this)" onblur="mdObsSave(this)" placeholder="Sem observação registrada.">' + esc(mdText(r, obs)) + '</textarea></div>'
+      : '';
+    return '<div class="md-detail-head"><div><span class="md-detail-tag"><span class="md-id is-dark">ID ' + esc(mdText(r, F.id) || '—') + '</span>' + esc(p.name) + (mdText(r, F.orgao) ? ' · ' + esc(mdText(r, F.orgao)) : '') + '</span>' +
+      '<h3>' + esc(recordTitle(r, p)) + '</h3></div>' +
+      '<button type="button" class="md-open" data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" onclick="editRecord(this.dataset.pid, this.dataset.rid)">Abrir obra completa →</button></div>' +
+      '<div class="md-grid">' +
+      cell((F.orgao && F.orgao.name) || 'Órgão responsável', plain(mdText(r, F.orgao))) +
+      cell((F.etapa && F.etapa.name) || 'Macroetapa atual', stage ? '<span class="md-stage">' + esc(stage) + '</span>' : plain('')) +
+      cell((F.prioridade && F.prioridade.name) || 'Prioridade', mdPriorityChip(mdText(r, F.prioridade)) || plain('')) +
+      cell((F.sei && F.sei.name) || 'Processo SEI', sei ? '<span class="md-sei"><code>' + esc(sei) + '</code><button type="button" class="iconbtn" title="Copiar número do processo" aria-label="Copiar número do processo" data-copy="' + esc(sei) + '" onclick="mdCopy(this.dataset.copy)">' + icon('file') + '</button></span>' : plain('')) +
+      cell((F.responsavel && F.responsavel.name) || 'Responsável', plain(mdText(r, F.responsavel))) +
+      cell('Tipo / Região', '<b class="md-small">' + esc(tipoRegiao || '—') + '</b>') +
+      '</div>' + obsHtml +
+      '<footer class="md-detail-foot"><span>Cronograma previsto: <b>' + esc(inicio && fim ? inicio + ' - ' + fim : inicio || fim || 'não informado') + '</b></span><span>Status: <b>' + esc(status) + '</b></span></footer>';
+  }
+  function masterDetail(rs, p) {
+    var F = mdFields(p);
+    var byId = function (id) { return (p.records || []).find(function (x) { return String(x.id) === String(id); }); };
+    var sel = mdSelected[p.id];
+    if (!rs.some(function (r) { return String(r.id) === String(sel); })) sel = mdSelected[p.id] = rs[0].id;
+    var current = byId(sel) || rs[0];
+    return '<div class="md-wrap" data-pid="' + esc(p.id) + '">' +
+      '<div class="md-list" role="listbox" aria-label="Obras" tabindex="-1" onkeydown="mdKeys(event, this.closest(\'.md-wrap\').dataset.pid)">' +
+      rs.map(function (r) { return mdListItem(byId(r.id) || r, p, F, String(r.id) === String(sel)); }).join('') + '</div>' +
+      '<section class="md-detail" id="mdDetail" aria-live="polite">' + mdDetail(current, p, F) + '</section></div>' +
+      '<div class="tablefoot"><span>' + rs.length + ' obra(s)</span><span>Use ↑ ↓ na lista para trocar de obra</span></div>';
+  }
+  window.mdSelect = function (pid, rid) {
+    var p = visible().find(function (x) { return x.id === pid; });
+    var r = p && (p.records || []).find(function (x) { return String(x.id) === String(rid); });
+    if (!r) return;
+    var area = document.getElementById('mdObs');
+    if (area && area.value !== area.dataset.original) mdObsSave(area);
+    mdSelected[pid] = rid;
+    document.querySelectorAll('.md-item').forEach(function (b) { var on = b.dataset.rid === String(rid); b.classList.toggle('is-selected', on); b.setAttribute('aria-selected', on); if (on) b.scrollIntoView({ block: 'nearest' }); });
+    var detail = document.getElementById('mdDetail');
+    if (detail) detail.innerHTML = mdDetail(r, p, mdFields(p));
+  };
+  window.mdKeys = function (e, pid) {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    var items = Array.prototype.slice.call(document.querySelectorAll('.md-item'));
+    var i = items.findIndex(function (b) { return b.classList.contains('is-selected'); });
+    var next = items[Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    if (!next) return;
+    e.preventDefault();
+    window.mdSelect(pid, next.dataset.rid);
+    next.focus();
+  };
+  window.mdCopy = function (text) {
+    var done = function () { notify('Número do processo copiado.'); };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, done); else done();
+  };
+  var mdTimer = null;
+  window.mdObsTyping = function (area) {
+    if (area.readOnly) return;
+    var state = document.getElementById('mdObsState');
+    if (state) state.textContent = '● Digitando…';
+    clearTimeout(mdTimer);
+    mdTimer = setTimeout(function () { window.mdObsSave(area); }, 1200);
+  };
+  window.mdObsSave = function (area) {
+    clearTimeout(mdTimer);
+    if (!area || area.readOnly) return;
+    var p = db.projects.find(function (x) { return x.id === area.dataset.pid; });
+    var r = p && (p.records || []).find(function (x) { return String(x.id) === area.dataset.rid; });
+    var f = p && mdFields(p).observacao;
+    var state = document.getElementById('mdObsState');
+    if (!r || !f || !mdCanEditField(p, r, f)) return;
+    var value = area.value, old = r[f.id] == null ? '' : String(r[f.id]);
+    if (value === old) { if (state && document.getElementById('mdObs') === area) state.textContent = '● Salvamento automático ativo'; return; }
+    r[f.id] = value;
+    area.dataset.original = value;
+    persist('Alterou ' + f.name, p, old, value, f.name, !!window.SECAP_OBRAS_BACKEND);
+    if (state) state.textContent = '● Salvando…';
+    var finish = function (ok) {
+      if (!ok && r[f.id] === value) {
+        // O banco recusou: a obra volta ao valor anterior e o texto fica pendente para nova tentativa.
+        r[f.id] = old;
+        area.dataset.original = old;
+      }
+      var s = document.getElementById('mdObsState');
+      if (s && document.getElementById('mdObs') === area) s.textContent = ok ? '● Salvo às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '● Não foi possível salvar';
+    };
+    if (window.SECAP_OBRAS_BACKEND) Promise.resolve(window.SECAP_OBRAS_BACKEND.saveObra(p.id, r)).then(function (res) { finish(!res || res.ok !== false); }, function () { finish(false); });
+    else finish(true);
+  };
 })();
