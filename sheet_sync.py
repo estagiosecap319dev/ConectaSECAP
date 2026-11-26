@@ -730,10 +730,9 @@ LOCK_OWNER = ('vercel-' if os.environ.get('VERCEL') else 'local-') + uuid.uuid4(
 def quick_check(cfg, cycle):
     """Resumo barato dos dois lados. Planilha: hash dos valores lidos do Google (não gasta o banco).
     Portal: hash calculado no próprio banco (32 caracteres em vez de baixar todas as obras).
-    Devolve None quando não dá para conferir (aba não fixada ou banco sem a função)."""
+    Sem aba fixa (planilhas conectadas pelo portal), o resumo da planilha cobre todas as abas.
+    Devolve None quando o banco ainda não tem a função de resumo."""
     title = str(cfg.get('aba') or '').strip()
-    if not title:
-        return None
     try:
         db = cycle.portal.rpc('secap_sheet_sync_fingerprint',
                               {'p_key': state_key(cfg), 'p_project': cfg['projeto_id']}) or {}
@@ -741,7 +740,12 @@ def quick_check(cfg, cycle):
         if _db_state_missing(exc):
             return None
         raise
-    values = cycle.sheets.read([f"'{title}'"], 'UNFORMATTED_VALUE')[0]
+    if title:
+        values = cycle.sheets.read([f"'{title}'"], 'UNFORMATTED_VALUE')[0]
+    else:
+        # Leitura no Google (não gasta o banco). Qualquer mudança em qualquer aba faz o ciclo completo.
+        titles = cycle.sheets.sheet_titles()
+        values = [titles, cycle.sheets.read([f"'{t}'" for t in titles], 'UNFORMATTED_VALUE')] if titles else []
     sheet = hashlib.sha256(json.dumps(values, ensure_ascii=False, default=str).encode('utf-8')).hexdigest()
     portal = db.get('portal') or ''
     unchanged = bool(db.get('hasBase')) and sheet == db.get('storedSheet') and portal == db.get('storedPortal')
