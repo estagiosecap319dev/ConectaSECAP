@@ -7,7 +7,8 @@
 --        · mudou título, data ou horário                 -> todos os participantes ("alterada");
 --        · só entraram participantes novos               -> apenas os novos.
 --      Salvar de novo sem mudança relevante não gera aviso.
---   3. O sino do portal mostra a notificação (secap_my_notifications / secap_admin_notifications).
+--   3. O sino do portal mostra a notificação (secap_my_notifications / secap_admin_notifications)
+--      na hora, pelo tempo real do Supabase (Realtime): cada pessoa recebe só os próprios avisos.
 --   4. O gatilho chama (assíncrono, via pg_net) /api/meeting-notify na Vercel, que envia o e-mail
 --      e marca a notificação como enviada. Endereço e segredo: 'secap_meeting_notify_url' e
 --      'secap_meeting_notify_secret' no Vault ou, se não existirem, os do aviso de acesso
@@ -231,6 +232,23 @@ begin
 end $$;
 revoke all on function public.secap_admin_notifications(integer) from public, anon;
 grant execute on function public.secap_admin_notifications(integer) to authenticated;
+
+-- Tempo real: o portal "ouve" os avisos novos e atualiza o sino na hora (Supabase Realtime).
+-- Cada pessoa só pode ler e receber os próprios avisos (regra abaixo). Gravar continua
+-- proibido para os usuários: só o gatilho grava.
+grant select on public.secap_meeting_notifications to authenticated;
+drop policy if exists meeting_notifications_own on public.secap_meeting_notifications;
+create policy meeting_notifications_own on public.secap_meeting_notifications
+  for select to authenticated using (user_id = auth.uid());
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public'
+                       and tablename = 'secap_meeting_notifications') then
+    alter publication supabase_realtime add table public.secap_meeting_notifications;
+  end if;
+end $$;
 
 notify pgrst, 'reload schema';
 commit;

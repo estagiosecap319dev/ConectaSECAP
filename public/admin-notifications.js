@@ -208,11 +208,60 @@ render = function () {
   if (bellEnabled()) {
     paintAdminBell();
     loadAdminBell();
-  } else if (adminBell.open) closeAdminBell();
+    startBellRealtime();
+  } else {
+    if (adminBell.open) closeAdminBell();
+    stopBellRealtime();
+  }
   return result;
 };
+// ---- Tempo real (Supabase Realtime) -------------------------------------------------
+// O portal "ouve" os avisos de reunião gravados para a conta logada e atualiza o sino na hora,
+// com um aviso rápido na tela. O banco só entrega à pessoa os próprios avisos (meeting_notify.sql).
+let bellRealtime = { channel: null, uid: '', ok: false, starting: false };
+function stopBellRealtime() {
+  if (bellRealtime.channel && window.sb?.removeChannel) window.sb.removeChannel(bellRealtime.channel);
+  bellRealtime = { channel: null, uid: '', ok: false, starting: false };
+}
+async function startBellRealtime() {
+  if (!bellEnabled() || !window.sb?.channel || !window.sb?.auth || bellRealtime.starting) return;
+  bellRealtime.starting = true;
+  try {
+    const { data } = await window.sb.auth.getSession();
+    const uid = data?.session?.user?.id || '';
+    if (!uid) return stopBellRealtime();
+    if (bellRealtime.channel && bellRealtime.uid === uid) return;
+    stopBellRealtime();
+    bellRealtime.uid = uid;
+    bellRealtime.channel = window.sb
+      .channel('secap-bell-' + uid)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'secap_meeting_notifications', filter: 'user_id=eq.' + uid },
+        (payload) => {
+          const n = payload?.new || {};
+          const hour = n.meeting_time ? ` às ${String(n.meeting_time).slice(0, 5)}` : '';
+          notify(`${n.kind === 'alterada' ? 'Reunião alterada' : 'Nova reunião'}: ${n.title || 'sem título'} · ${adminBellDate(n.meeting_date)}${hour}`, 'success');
+          loadAdminBell(true);
+        }
+      )
+      .subscribe((status) => {
+        bellRealtime.ok = status === 'SUBSCRIBED';
+      });
+  } catch (error) {
+    bellRealtime.ok = false; // sem tempo real: a consulta periódica continua cobrindo
+  } finally {
+    bellRealtime.starting = false;
+  }
+}
+
+// Consulta de reserva: a cada 2 minutos sem tempo real; com tempo real conectado, a cada 10 minutos
+// (só para o caso de a conexão cair sem aviso).
 setInterval(() => {
-  if (bellEnabled()) loadAdminBell(true);
+  if (!bellEnabled()) return stopBellRealtime();
+  startBellRealtime();
+  if (bellRealtime.ok && Date.now() - adminBell.at < 600000) return;
+  loadAdminBell(true);
 }, 120000);
 queueMicrotask(() => {
   if (bellEnabled()) loadAdminBell(true);
