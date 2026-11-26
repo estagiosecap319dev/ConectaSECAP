@@ -178,14 +178,18 @@ let records = () =>
   visible()
     .filter((p) => !filterProject || p.id === filterProject)
     .flatMap((p) => p.records.map((r) => ({ ...r, project: p })))
-    .filter((r) => (!filterStatus || r.status === filterStatus) && matchesQuery(r));
+    .filter((r) => (typeof statusFilterMatch === 'function' ? statusFilterMatch(r, r.project) : !filterStatus || r.status === filterStatus) && matchesQuery(r));
 
 const avg = (rs) =>
   Math.round(rs.reduce((s, r) => s + (Number(r.progresso) || 0), 0) / (rs.length || 1));
 const sum = (rs, f) => rs.reduce((s, r) => s + (Number(r[f]) || 0), 0);
 // Situação normalizada ("04 – Concluído" -> "Concluído"); canonicalStatus vem de status-presentation.js.
 const statusIs = (r, label) =>
-  (typeof canonicalStatus === 'function' ? canonicalStatus(r.status) : r.status) === label;
+  (typeof workStatusOf === 'function'
+    ? workStatusOf(r)
+    : typeof canonicalStatus === 'function'
+      ? canonicalStatus(r.status)
+      : r.status) === (typeof canonicalStatus === 'function' ? canonicalStatus(label) : label);
 // Investimento: obras canceladas não entram na soma (mesmo critério do Painel executivo).
 const investRows = (rs) => rs.filter((r) => !statusIs(r, 'Cancelado'));
 // Indicadores da pasta: usam o campo vinculado (ou reconhecido pelo nome) em vez de IDs fixos,
@@ -193,6 +197,7 @@ const investRows = (rs) => rs.filter((r) => !statusIs(r, 'Cancelado'));
 const projectKey = (p, semantic, fallback) =>
   (typeof fieldKey === 'function' ? fieldKey(p, semantic) : '') || fallback;
 const projectStatusIs = (r, p, label) => {
+  if (typeof workStatusOf === 'function') return workStatusOf(r, p) === label;
   const v = r[projectKey(p, 'status', 'status')];
   return (typeof canonicalStatus === 'function' ? canonicalStatus(v) : v) === label;
 };
@@ -247,7 +252,7 @@ const badge = (s) => {
     }[key] || color;
   return `<span class="badge" data-status-chip style="--status-color:${color};--status-ink:${ink}">${esc(label)}</span>`;
 };
-const late = (r) => r.prazo && r.prazo < today() && r.status !== 'Concluído';
+const late = (r) => r.prazo && r.prazo < today() && !statusIs(r, 'Concluído');
 
 function persist(
   action,
@@ -440,7 +445,7 @@ function avatarMarkup(user, sizeClass = '') {
     .map((x) => x[0])
     .join('');
   return src
-    ? `<img class="profile-avatar ${sizeClass}" src="${esc(src)}" alt="Foto de perfil" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'profile-avatar ${sizeClass}',textContent:'${esc(initials)}'}))">`
+    ? `<img class="profile-avatar ${sizeClass}" src="${esc(src)}" alt="Foto de perfil" data-initials="${esc(initials)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:this.className,textContent:this.dataset.initials}))">`
     : `<span class="profile-avatar ${sizeClass}" aria-label="Avatar de ${esc(user?.name || 'usuário')}">${esc(initials)}</span>`;
 }
 
@@ -657,13 +662,14 @@ function filters(extra = '') {
     )
     .join(
       ''
-    )}</select><select aria-label="Filtrar status" onchange="filterStatus=this.value;render()"><option value="">Todos os status</option>${[
-    'Planejamento',
-    'Em andamento',
-    'Em atenção',
-    'Concluído',
-  ]
-    .map((s) => `<option ${filterStatus === s ? 'selected' : ''}>${s}</option>`)
+    )}</select><select aria-label="Filtrar status" onchange="filterStatus=this.value;render()"><option value="">Todos os status</option>${(typeof statusFilterOptions === 'function'
+    ? statusFilterOptions()
+    : ['Planejamento', 'Em andamento', 'Em atenção', 'Concluído']
+  )
+    .map(
+      (s) =>
+        `<option ${filterStatus && (filterStatus === s || (typeof canonicalStatus === 'function' && canonicalStatus(filterStatus) === canonicalStatus(s))) ? 'selected' : ''}>${esc(s)}</option>`
+    )
     .join('')}</select>${extra}<span class="right">${icon('clock')} Atualizado agora</span></div>`;
 }
 
@@ -876,7 +882,7 @@ function editRecord(pid, rid = '') {
       <div class="stats" style="margin-bottom: 24px;">
         <div class="stat">
           <div class="top">SITUAÇÃO</div>
-          <div class="number" style="font-size:16px;">${badge(r.status)}</div>
+          <div class="number" style="font-size:16px;">${badge(typeof workStatusOf === 'function' ? workStatusOf(r, p) : r.status)}</div>
         </div>
         <div class="stat">
           <div class="top">AVANÇO FÍSICO</div>
@@ -2099,9 +2105,9 @@ function projectStage(p) {
   if (PROJECT_STAGES.includes(p.stage)) return p.stage;
   const rs = p.records || [];
   if (!rs.length) return 'Planejamento';
-  if (rs.some((r) => r.status === 'Em atenção' || late(r))) return 'Em atenção';
-  if (rs.every((r) => r.status === 'Concluído')) return 'Concluído';
-  if (rs.some((r) => r.status === 'Em andamento' || r.status === 'Concluído'))
+  if (rs.some((r) => statusIs(r, 'Ponto de Atenção') || late(r))) return 'Em atenção';
+  if (rs.every((r) => statusIs(r, 'Concluído'))) return 'Concluído';
+  if (rs.some((r) => statusIs(r, 'Em andamento') || statusIs(r, 'Concluído')))
     return 'Em andamento';
   return 'Planejamento';
 }
@@ -3819,7 +3825,7 @@ function editRecord(pid, rid = '') {
       <div class="stats" style="margin-bottom: 24px;">
         <div class="stat">
           <div class="top">SITUAÇÃO</div>
-          <div class="number" style="font-size:16px;">${badge(r.status)}</div>
+          <div class="number" style="font-size:16px;">${badge(typeof workStatusOf === 'function' ? workStatusOf(r, p) : r.status)}</div>
         </div>
         <div class="stat">
           <div class="top">AVANÇO FÍSICO</div>
@@ -4906,7 +4912,7 @@ function openExport(pid = '') {
   const projects = visible().filter((p) => !pid || p.id === pid),
     recordsToExport = (
       pid ? projects.flatMap((p) => p.records.map((r) => ({ ...r, project: p }))) : records()
-    ).filter((r) => (!filterStatus || r.status === filterStatus) && matchesQuery(r));
+    ).filter((r) => (typeof statusFilterMatch === 'function' ? statusFilterMatch(r, r.project) : !filterStatus || r.status === filterStatus) && matchesQuery(r));
   const fields = [...new Map(projects.flatMap((p) => p.fields).map((f) => [f.id, f])).values()];
   modal(
     'Exportar dados',
@@ -4930,7 +4936,7 @@ function openExport(pid = '') {
 function performExport(pid = '') {
   const ps = visible().filter((p) => !pid || p.id === pid),
     rs = (pid ? ps.flatMap((p) => p.records.map((r) => ({ ...r, project: p }))) : records()).filter(
-      (r) => (!filterStatus || r.status === filterStatus) && matchesQuery(r)
+      (r) => (typeof statusFilterMatch === 'function' ? statusFilterMatch(r, r.project) : !filterStatus || r.status === filterStatus) && matchesQuery(r)
     );
   const selected = [...document.querySelectorAll('input[name="exportField"]:checked')].map(
       (x) => x.value

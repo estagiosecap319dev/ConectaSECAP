@@ -336,7 +336,7 @@ function biRows(p) {
   return p.records.filter(
     (r) =>
       matchesQuery(r) &&
-      (!filterStatus || String(val(r, p, 'status') || '') === filterStatus) &&
+      (typeof statusFilterMatch === 'function' ? statusFilterMatch(r, p) : !filterStatus || String(val(r, p, 'status') || '') === filterStatus) &&
       (!biFilter || String(r[biDimension] || 'Não informado') === biFilter)
   );
 }
@@ -444,7 +444,7 @@ bi = function () {
 };
 function biFilters(p, rs) {
   const f = biField(p, 'status'),
-    opts = f?.options || [],
+    opts = typeof workStatusOptionsFor === 'function' ? workStatusOptionsFor(p) : f?.options || [],
     dims = p.fields.filter(
       (f) => ['select', 'text', 'responsible', 'boolean'].includes(f.type) && f.id !== 'nome'
     );

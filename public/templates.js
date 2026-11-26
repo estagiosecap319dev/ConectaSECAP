@@ -3050,7 +3050,9 @@ editFields = function (pid, focusSection = '') {
       const secFields = p.fields.filter((f) => (f.group || 'Outras informações') === secName);
       const theme = getGroupTheme(secName, p);
       const isFocused = focusSection === secName;
-      const escapedSec = esc(secName).replace(/'/g, "\\'");
+      const escapedSec = esc(
+        String(secName).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/[\r\n\u2028\u2029]/g, ' ')
+      );
 
       return `
       <div class="panel"

@@ -329,14 +329,26 @@ function dimensionPicker(p, fields, kind) {
       kind === 'topic'
         ? 'Composição dos grupos ou colunas'
         : kind === 'category'
-          ? 'Composição da categoria · eixo ou fatias'
-          : 'Composição dos segmentos do empilhamento';
-  return `<div class="dimension-picker"><label>${label}</label><div class="dimension-pills">${fields.map((id, i) => `<div class="dimension-pill"><span class="dimension-order">${i + 1}</span><b>${esc(biColumnName(p, id))}</b><button type="button" aria-label="Subir ${esc(biColumnName(p, id))}" ${i === 0 ? 'disabled' : ''} onclick="changeDimension('${kind}',${i},'up')">↑</button><button type="button" aria-label="Remover ${esc(biColumnName(p, id))}" onclick="changeDimension('${kind}',${i},'remove')">${icon('close')}</button></div>`).join('') || '<span class="subtitle">Nenhum campo selecionado</span>'}</div><div class="dimension-add"><select id="dimensionAdd_${kind}" aria-label="Adicionar campo ${kind === 'category' ? 'à categoria' : kind === 'series' ? 'aos segmentos' : 'ao agrupamento'}"><option value="">Escolha mais um campo...</option>${candidates
+          ? 'Categoria · eixo ou fatias'
+          : 'Dividir cada barra por';
+  const single = kind === 'category' || kind === 'series',
+    full = single && fields.length >= 1,
+    addLabel = kind === 'category' && full ? 'Cruzar com outro campo...' : kind === 'series' && full ? 'Trocar por outro campo...' : 'Escolha mais um campo...',
+    addText = kind === 'category' && full ? 'Cruzar' : kind === 'series' && full ? 'Trocar' : 'Adicionar',
+    help =
+      kind === 'category'
+        ? fields.length > 1
+          ? '<small class="chart-config-error">Este gráfico junta vários campos num só rótulo. Remova os campos extras e use "Cruzar" para comparar de verdade.</small>'
+          : '<small>Use um campo. Para comparar com outro campo (ex.: status por órgão), escolha-o em "Cruzar": o gráfico vira barras agrupadas.</small>'
+        : kind === 'series'
+          ? '<small>Cada valor deste campo vira uma cor dentro da barra.</small>'
+          : '<small>A ordem escolhida define a apresentação. Ex.: Órgão + Macroetapa + Status.</small>';
+  return `<div class="dimension-picker"><label>${label}</label><div class="dimension-pills">${fields.map((id, i) => `<div class="dimension-pill"><span class="dimension-order">${i + 1}</span><b>${esc(biColumnName(p, id))}</b><button type="button" aria-label="Subir ${esc(biColumnName(p, id))}" ${i === 0 ? 'disabled' : ''} onclick="changeDimension('${kind}',${i},'up')">↑</button><button type="button" aria-label="Remover ${esc(biColumnName(p, id))}" onclick="changeDimension('${kind}',${i},'remove')">${icon('close')}</button></div>`).join('') || '<span class="subtitle">Nenhum campo selecionado</span>'}</div><div class="dimension-add"><select id="dimensionAdd_${kind}" aria-label="Adicionar campo ${kind === 'category' ? 'à categoria' : kind === 'series' ? 'aos segmentos' : 'ao agrupamento'}"><option value="">${addLabel}</option>${candidates
     .filter((f) => !fields.includes(f.id))
     .map((f) => `<option value="${f.id}">${esc(biColumnName(p, f.id))}</option>`)
     .join(
       ''
-    )}</select><button class="btn" type="button" onclick="changeDimension('${kind}',0,'add')">${icon('plus')}Adicionar</button></div><small>A ordem escolhida define a apresentação. Ex.: Órgão + Macroetapa + Status.</small></div>`;
+    )}</select><button class="btn" type="button" onclick="changeDimension('${kind}',0,'add')">${icon('plus')}${addText}</button></div>${help}</div>`;
 }
 function editTopic(id, scope) {
   const p = visible().find((p) => p.id === id);
@@ -389,6 +401,18 @@ function changeDimension(kind, index, action) {
     arr = isTopic ? topicDraft.config.groups : visualDraft.config[key];
   if (action === 'add') {
     const v = $('#dimensionAdd_' + kind).value;
+    if (!isTopic && kind === 'category' && arr.length >= 1 && v && !arr.includes(v)) {
+      // Segundo campo na categoria: em vez de colar os dois num rótulo, cruza (barras agrupadas).
+      const form = $('#chartEditorForm'),
+        type = form.elements.type.value;
+      visualDraft.config.seriesFields = [v];
+      form.elements.series.value = v;
+      if (!SERIES_CHART_TYPES.includes(type)) form.elements.type.value = type === 'barv' ? 'grouped' : 'grouped_h';
+      renderChartDimensions();
+      updateVisualDraft();
+      return;
+    }
+    if (!isTopic && kind === 'series' && v) arr.splice(0, arr.length);
     if (v && !arr.includes(v)) arr.push(v);
   } else if (action === 'remove') arr.splice(index, 1);
   else if (action === 'up' && index > 0)
@@ -448,7 +472,7 @@ function compoundVisual(p, rows, config) {
   const c = structuredClone(config),
     categories = (c.categories || [c.category]).filter((id) => p.fields.some((f) => f.id === id)),
     segments = (c.seriesFields || [c.series]).filter((id) => p.fields.some((f) => f.id === id));
-  const rs = rows.map((r) => ({ ...r })),
+  const rs = normalizeBiRows(p, rows.map((r) => ({ ...r })), [...categories, ...segments]),
     pp = { ...p, fields: [...p.fields] };
   if (categories.length > 1) {
     const key = '__compound_' + (c.id || 'chart') + '_category';
@@ -534,7 +558,7 @@ function chartDimensionText(p, c) {
       .filter(Boolean)
       .map((id) => biColumnName(p, id))
       .join(' + ');
-  return a + (b && ['stacked', 'stacked_h', 'stacked100'].includes(c.type) ? ' × ' + b : '');
+  return a + (b && SERIES_CHART_TYPES.includes(c.type) ? ' × ' + b : '');
 }
 const switchSectionBeforeTopics = switchBiSection;
 switchBiSection = function (section) {

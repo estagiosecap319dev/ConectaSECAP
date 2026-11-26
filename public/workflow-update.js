@@ -117,6 +117,7 @@ function obraCard(p, r, b) {
   return `<article class="kanban tcard" style="border-top:4px solid ${color}" draggable="${editable}" ondragstart="kanbanDragStart(event,'${esc(p.id)}|${esc(r.id)}')" ondragend="kanbanDragEnd(this)"><button class="tcard-title" onclick="editRecord('${esc(p.id)}','${esc(r.id)}')"><h3>${esc(r.nome || 'Obra sem nome')}</h3></button><p class="tcard-next">${esc(p.name)}${r.orgao ? ' · ' + esc(r.orgao) : ''}</p>${pct !== null ? `<div class="pr"><div class="progress"><i style="width:${Math.min(100, pct)}%;background:${color}"></i></div>${pct}%</div>` : ''}<div class="tcard-foot"><span class="tcard-chip" title="Situação da obra" style="border-left:3px solid ${sc}">${esc(canonicalStatus(status))}</span>${isLate ? `<span class="tcard-chip late" title="Prazo vencido">${icon('alert')}Em atraso</span>` : ''}${r.prazo ? `<span class="tcard-chip" title="Prazo">${icon('calendar')}${esc(date(r.prazo))}</span>` : ''}<span class="tcard-spacer"></span><span class="tcard-avatar" title="${esc(r.responsavel || 'Sem responsável')}">${esc(initials(r.responsavel))}</span></div>${editable ? `<select class="tcard-move" aria-label="Alterar etapa de ${esc(r.nome || 'obra')}" onchange="moveObra('${esc(p.id)}','${esc(r.id)}',this.value)">${b.stages.map((v) => `<option ${stage === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : ''}</article>`;
 }
 kanban = function () {
+  if (typeof resetBoardStages === 'function') resetBoardStages();
   const b = activeBoard(),
     projects = visible().filter((p) => !filterProject || p.id === filterProject);
   const items = projects
@@ -148,7 +149,7 @@ kanban = function () {
         (me()?.role === 'Administrador' ? btn('Novo quadro', 'editWorkflow()', 'plus') : '')
     ) +
     filters(typeof kanbanResponsibleFilter==='function'?kanbanResponsibleFilter():'') +
-    `${workflowSettings().boards.length>1?'<div class="workflow-switch"><label>Quadro <select aria-label="Selecionar quadro de acompanhamento" onchange="setWorkflow(this.value)">'+workflowSettings().boards.map(q=>'<option value="'+esc(q.id)+'" '+(q.id===b.id?'selected':'')+'>'+esc(q.id==='principal'?'Principal':q.name)+'</option>').join('')+'</select></label></div>':''}<div class="workflow-toolbar"><span>Arraste as obras entre etapas ou use a seleção no cartão. Mover entre etapas atualiza o status da obra no projeto. ${items.length} ${items.length === 1 ? 'obra' : 'obras'} neste quadro.</span>${me()?.role === 'Administrador' ? btn('Configurar quadro', `editWorkflow('${b.id}')`, 'edit') : ''}</div><div class="board trello-board calm-board">${b.stages
+    `${workflowSettings().boards.length>1?'<div class="workflow-switch"><label>Quadro <select aria-label="Selecionar quadro de acompanhamento" onchange="setWorkflow(this.value)">'+workflowSettings().boards.map(q=>'<option value="'+esc(q.id)+'" '+(q.id===b.id?'selected':'')+'>'+esc(q.id==='principal'?'Principal':q.name)+'</option>').join('')+'</select></label></div>':''}<div class="workflow-toolbar"><span>Arraste as obras entre etapas ou use a seleção no cartão. Mover entre etapas atualiza o status da obra no projeto e na Visão geral. Status que ainda não têm etapa ganham uma coluna automaticamente. ${items.length} ${items.length === 1 ? 'obra' : 'obras'} neste quadro.</span>${me()?.role === 'Administrador' ? btn('Configurar quadro', `editWorkflow('${b.id}')`, 'edit') : ''}</div><div class="board trello-board calm-board">${(typeof boardStages === 'function' ? boardStages(b) : b.stages)
       .map((stage, i) => {
         const color = validHex(b.colors[stage]) ? b.colors[stage] : softDefaults[i % 4],
           col = items.filter(({ p, r }) => obraStage(r, p, b) === stage);
@@ -296,11 +297,18 @@ function resetStatusColors() {
 // Respect custom colors in all ECharts types, including per-item colors.
 const semanticColorOriginal = semanticVisualColor;
 let activeChartColors = null;
+// Cores quase brancas (ex.: "Não iniciado" #F2F2F2) somem no fundo branco do gráfico:
+// nesses casos a barra usa um cinza visível. Cores escolhidas pelo usuário no gráfico são respeitadas.
+function visibleChartColor(c) {
+  if (!validHex(c)) return c;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.8 ? '#b8c4ce' : c;
+}
 semanticVisualColor = function (label, i, palette) {
   return validHex(activeChartColors?.[label])
     ? activeChartColors[label]
     : palette === 'institutional'
-      ? statusColor(label, i)
+      ? visibleChartColor(statusColor(label, i))
       : semanticColorOriginal(label, i, palette);
 };
 const optionsBeforeWorkflow = visualOptions;

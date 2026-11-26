@@ -47,45 +47,72 @@ function workFieldEditable(p, key) {
   const allowed = getAllowedFieldsForCurrentUser(p.id);
   return allowed === null || (Array.isArray(allowed) && allowed.includes(key));
 }
+// Etapa do quadro -> status da lista fechada. "Ainda não definido" reúne obras sem status ou fora da lista.
+// Uma etapa com nome fora da lista não corresponde a nenhum status (devolve null).
 function workStageStatus(stage) {
-  const value = canonicalStatus(stage);
-  if (value === 'Ainda não definido') return value;
-  if (value === 'Em planejamento') return 'Em planejamento';
-  return [
-    'Concluído',
-    'Em andamento',
-    'Ponto de Atenção',
-    'Paralisado',
-    'Cancelado',
-    'Não iniciado',
-    'Atrasado',
-    'Em análise',
-    'Iniciado',
-  ].includes(value)
-    ? value
-    : // Etapa nova criada no quadro de Acompanhamento passa a ser um status da obra.
-      value || null;
+  if (String(stage ?? '').trim() === 'Ainda não definido') return 'Ainda não definido';
+  const value = closedWorkStatus(stage);
+  return WORK_STATUS_LIST.includes(value) ? value : null;
 }
 function workStatusValue(p, stage) {
   const target = workStageStatus(stage);
   if (!target) return null;
+  // Voltar para "Ainda não definido" limpa o status da obra.
+  if (target === 'Ainda não definido') return '';
   const options = p.fields.find((f) => f.id === obraStatusKey(p))?.options || [];
   return options.find((v) => canonicalStatus(v) === target) || target;
 }
+// Status exibido no Acompanhamento: a fonte única (workStatusOf). Sem status ou fora da lista,
+// a obra fica em "Ainda não definido".
+obraStatus = function (r, p) {
+  const s = workStatusOf(r, p);
+  return WORK_STATUS_LIST.includes(s) ? s : 'Ainda não definido';
+};
+// Etapas do quadro = etapas configuradas + status DA LISTA que ainda não têm etapa.
+// Assim, ao cadastrar/editar uma obra com um status da lista sem coluna, a coluna aparece automaticamente.
+const WORK_STATUS_ORDER = WORK_STATUS_LIST;
+let boardStagesMemo = new Map();
+function resetBoardStages() {
+  boardStagesMemo = new Map();
+}
+function boardStages(b = activeBoard()) {
+  if (boardStagesMemo.has(b)) return boardStagesMemo.get(b);
+  const known = new Set(b.stages.map(workStageStatus).filter(Boolean));
+  const extra = new Set();
+  for (const p of visible())
+    for (const r of p.records || []) {
+      if (!isSysAdmin() && typeof canSeeAssignedWork === 'function' && !canSeeAssignedWork(p.id, r.id)) continue;
+      const s = obraStatus(r, p);
+      if (WORK_STATUS_LIST.includes(s) && !known.has(s)) extra.add(s);
+    }
+  const rank = (s) => (WORK_STATUS_ORDER.includes(s) ? WORK_STATUS_ORDER.indexOf(s) : 99);
+  const added = [...extra].sort((a, c) => rank(a) - rank(c) || a.localeCompare(c, 'pt-BR'));
+  const list = [...b.stages];
+  const at = list.indexOf('Ainda não definido');
+  list.splice(at < 0 ? list.length : at, 0, ...added);
+  boardStagesMemo.set(b, list);
+  return list;
+}
 obraStage = function (r, p, b = activeBoard()) {
-  const status = canonicalStatus(obraStatus(r, p));
-  return (
-    b.stages.find((stage) => workStageStatus(stage) === status) ||
-    b.stages.find(
-      (stage) =>
-        stage ===
-        (OBRA_STAGE_FALLBACK[status] ||
-          (['Em planejamento', 'Não iniciado'].includes(status)
-            ? 'Planejamento'
-            : ''))
-    ) ||
-    'Ainda não definido'
-  );
+  const status = obraStatus(r, p);
+  return boardStages(b).find((stage) => workStageStatus(stage) === status) || 'Ainda não definido';
+};
+// "Situação das obras" (Visão geral, cartões, BI e contêineres): a mesma fonte única.
+workSituation = function (r, p) {
+  return workStatusOf(r, p);
+};
+// Configurar quadro: as etapas precisam ser status da lista (ou "Ainda não definido").
+const saveWorkflowBeforeClosedList = saveWorkflow;
+saveWorkflow = function (id) {
+  const form = document.getElementById('workflowForm');
+  const stages = String(form?.elements.stages.value || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  const invalid = stages.filter((s) => !workStageStatus(s));
+  if (invalid.length)
+    return notify(
+      'Estas etapas não estão na lista de status: ' + invalid.join(', ') + '. Use: ' + WORK_STATUS_LIST.join(', ') + '.',
+      'error'
+    );
+  return saveWorkflowBeforeClosedList(id);
 };
 obraCard = function (p, r, b) {
   const editable = workFieldEditable(p, obraStatusKey(p)),
@@ -106,7 +133,7 @@ obraCard = function (p, r, b) {
     : acompField
       ? '<span class="work-owner-missing">Sem responsável de acompanhamento</span>'
       : '<span class="work-owner-missing">+ Definir responsáveis</span>';
-  return `<article class="kanban tcard" style="border-top:4px solid ${color}" draggable="${editable}" ondragstart="kanbanDragStart(event,'${esc(p.id)}|${esc(r.id)}')" ondragend="kanbanDragEnd(this)"><button class="tcard-title" onclick="editRecord('${esc(p.id)}','${esc(r.id)}')"><h3>${esc(r.nome || 'Obra sem nome')}</h3></button><p class="tcard-next">${esc(p.name)}${r.orgao ? ' · ' + esc(r.orgao) : ''}</p>${pct !== null ? `<div class="pr"><div class="progress"><i style="width:${pct}%;background:${color}"></i></div>${pct}%</div>` : ''}<div class="tcard-foot">${late(r) ? `<span class="tcard-chip late">${icon('alert')}Em atraso</span>` : ''}${r.prazo ? `<span class="tcard-chip">${icon('calendar')}${esc(date(r.prazo))}</span>` : ''}</div><button type="button" class="work-owner-list" title="${esc(names.join('; ') || (acompField ? 'Sem Responsável Acompanhamento — edite a obra para definir' : 'Sem responsável — clique para definir'))}" aria-label="Responsáveis por ${esc(r.nome || 'obra')}: ${esc(names.join('; ') || 'não informados')}" ${workFieldEditable(p, acompField ? acompField.id : workOwnerKey(p)) ? '' : 'disabled'} onclick="${acompField ? `editRecord('${esc(p.id)}','${esc(r.id)}')` : `openWorkOwners('${esc(p.id)}','${esc(r.id)}')`}">${owners}</button>${editable ? `<select class="tcard-move" aria-label="Alterar status de ${esc(r.nome || 'obra')}" onchange="moveObra('${esc(p.id)}','${esc(r.id)}',this.value)">${b.stages.map((v) => `<option ${v === stage ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : ''}</article>`;
+  return `<article class="kanban tcard" style="border-top:4px solid ${color}" draggable="${editable}" ondragstart="kanbanDragStart(event,'${esc(p.id)}|${esc(r.id)}')" ondragend="kanbanDragEnd(this)"><button class="tcard-title" onclick="editRecord('${esc(p.id)}','${esc(r.id)}')"><h3>${esc(r.nome || 'Obra sem nome')}</h3></button><p class="tcard-next">${esc(p.name)}${r.orgao ? ' · ' + esc(r.orgao) : ''}</p>${pct !== null ? `<div class="pr"><div class="progress"><i style="width:${pct}%;background:${color}"></i></div>${pct}%</div>` : ''}<div class="tcard-foot">${late(r) ? `<span class="tcard-chip late">${icon('alert')}Em atraso</span>` : ''}${r.prazo ? `<span class="tcard-chip">${icon('calendar')}${esc(date(r.prazo))}</span>` : ''}</div><button type="button" class="work-owner-list" title="${esc(names.join('; ') || (acompField ? 'Sem Responsável Acompanhamento — edite a obra para definir' : 'Sem responsável — clique para definir'))}" aria-label="Responsáveis por ${esc(r.nome || 'obra')}: ${esc(names.join('; ') || 'não informados')}" ${workFieldEditable(p, acompField ? acompField.id : workOwnerKey(p)) ? '' : 'disabled'} onclick="${acompField ? `editRecord('${esc(p.id)}','${esc(r.id)}')` : `openWorkOwners('${esc(p.id)}','${esc(r.id)}')`}">${owners}</button>${editable ? `<select class="tcard-move" aria-label="Alterar status de ${esc(r.nome || 'obra')}" onchange="moveObra('${esc(p.id)}','${esc(r.id)}',this.value)">${boardStages(b).map((v) => `<option ${v === stage ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : ''}</article>`;
 };
 const workSaving = new Set();
 async function saveWorkUpdate(p, r, next) {
@@ -136,7 +163,8 @@ moveObra = async function (pid, rid, stage) {
   const b = activeBoard(),
     p = visible().find((p) => p.id === pid),
     r = p?.records.find((r) => r.id === rid);
-  if (!r || !b.stages.includes(stage)) return;
+  resetBoardStages();
+  if (!r || !boardStages(b).includes(stage)) return;
   if (obraStage(r, p, b) === stage) {
     render();
     return;
@@ -148,20 +176,20 @@ moveObra = async function (pid, rid, stage) {
     return;
   }
   const value = workStatusValue(p, stage);
-  if (!value) {
-    notify('A etapa precisa ter um nome de situação reconhecido para atualizar a obra.', 'error');
+  if (value == null) {
+    notify('Esta etapa não corresponde a um status da lista. Peça ao administrador para ajustar o quadro.', 'error');
     render();
     return;
   }
   // Responsável pela próxima ação é opcional: mover a obra não exige preenchê-lo.
-  if (canonicalStatus(obraStatus(r, p)) === canonicalStatus(value)) {
+  if (value && obraStatus(r, p) === closedWorkStatus(value)) {
     render();
     return;
   }
   if (await saveWorkUpdate(p, r, { ...r, [key]: value })) {
     auditLoaded = false;
     render();
-    notify('Status da obra atualizado no projeto, acompanhamento e BI.');
+    notify('Status da obra atualizado no projeto, no Acompanhamento e na Visão geral.');
   } else render();
 };
 let workOwnersContext = null;

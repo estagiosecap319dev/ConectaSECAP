@@ -25,6 +25,14 @@ function biDateField(p, semantic) {
 function typographyFields(c = {}) {
   return `<fieldset class="typography-editor"><legend>Fonte dos títulos e textos</legend><label><input type="checkbox" name="customTypography" ${c.customTypography?'checked':''}> Personalizar a fonte deste bloco</label><div class="twocol"><div class="field"><label>Tamanho do título (px)</label><input name="titleFontSize" type="number" min="10" max="48" value="${Number(c.titleFontSize)||16}"></div><div class="field"><label>Tamanho dos textos / legendas (px)</label><input name="fontSize" type="number" min="10" max="36" value="${Number(c.fontSize)||12}"></div></div><div class="field"><label>Cor da fonte</label><input name="fontColor" type="color" value="${/^#[\da-f]{6}$/i.test(c.fontColor||'')?c.fontColor:'#003856'}"></div></fieldset>`;
 }
+// Mexer no tamanho ou na cor já liga "Personalizar a fonte deste bloco" (antes a mudança era ignorada
+// até marcar a caixa). Roda na captura, antes do oninput do formulário que atualiza a prévia.
+document.addEventListener('input', (e) => {
+  const box = e.target?.closest?.('.typography-editor');
+  if (!box || e.target.name === 'customTypography') return;
+  const check = box.querySelector('[name=customTypography]');
+  if (check && !check.checked) check.checked = true;
+}, true);
 function readTypography(data) {
   return { customTypography:data.has('customTypography'),
     titleFontSize:Math.max(10,Math.min(48,Number(data.get('titleFontSize'))||16)),

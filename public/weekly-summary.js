@@ -31,7 +31,7 @@ function wsRows(pid) {
   const projects = visible().filter((p) => !pid || p.id === pid);
   return projects
     .flatMap((p) => (p.records || []).map((r) => ({ r, p })))
-    .filter(({ r, p }) => (!filterStatus || r.status === filterStatus || String(val(r, p, 'status') || '') === filterStatus) && matchesQuery(r));
+    .filter(({ r, p }) => (typeof statusFilterMatch === 'function' ? statusFilterMatch(r, p) : !filterStatus || r.status === filterStatus || String(val(r, p, 'status') || '') === filterStatus) && matchesQuery(r));
 }
 
 function wsClassify(rows, horizon) {

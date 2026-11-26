@@ -4,6 +4,8 @@ const visualTypes = {
   pie: 'Pizza',
   barh: 'Barras horizontais',
   barv: 'Colunas verticais',
+  grouped_h: 'Barras agrupadas (cruzar 2 campos)',
+  grouped: 'Colunas agrupadas (cruzar 2 campos)',
   stacked: 'Colunas empilhadas',
   stacked_h: 'Barras empilhadas',
   stacked100: 'Colunas 100% empilhadas',
@@ -52,6 +54,52 @@ const semanticTypes = {
   priority: ['text', 'select'],
   source: ['text', 'select'],
 };
+// Tipos que dividem cada categoria por um segundo campo (cor / legenda).
+const SERIES_CHART_TYPES = ['stacked', 'stacked_h', 'stacked100', 'stacked100_h', 'heatmap', 'grouped', 'grouped_h'];
+const GROUPED_CHART_TYPES = ['grouped', 'grouped_h'];
+// Agrupamento tolerante: "não iniciada", "Não iniciada" e "Não iniciado" contam juntos.
+function biFoldText(v) {
+  return String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ').trim();
+}
+function biStatusLikeField(p, id) {
+  if (!id || !p) return false;
+  if (typeof fieldKey === 'function' && fieldKey(p, 'status') === id) return true;
+  const f = (p.fields || []).find((f) => f.id === id);
+  return !!f && /status|situacao/.test(biFoldText(f.name).replace(/[^a-z]/g, ''));
+}
+function biCanonicalValue(p, id, v) {
+  const raw = String(v ?? '').trim().replace(/\s+/g, ' ');
+  // Coluna de status da obra: sempre a lista fechada (o mesmo valor da Visão geral e do Acompanhamento).
+  if (raw && typeof closedWorkStatus === 'function' && typeof workStatusKey === 'function' && workStatusKey(p) === id)
+    return closedWorkStatus(raw);
+  return raw && biStatusLikeField(p, id) && typeof canonicalStatus === 'function' ? canonicalStatus(raw) : raw;
+}
+function biValueKey(p, id, v) {
+  const s = visualCategory(v);
+  return s === 'Não informado' ? 'nao informado' : biFoldText(biCanonicalValue(p, id, s));
+}
+// Recebe CÓPIAS das linhas: troca cada variação pela grafia mais usada (ou pelo status padrão).
+function normalizeBiRows(p, rows, ids) {
+  for (const id of new Set(ids)) {
+    const f = (p.fields || []).find((f) => f.id === id);
+    if (!f || ['date', 'number', 'currency'].includes(f.type)) continue;
+    const spellings = new Map();
+    for (const r of rows) {
+      const label = biCanonicalValue(p, id, r[id]);
+      if (!label) continue;
+      const key = biFoldText(label);
+      if (!spellings.has(key)) spellings.set(key, new Map());
+      const m = spellings.get(key);
+      m.set(label, (m.get(label) || 0) + 1);
+    }
+    const best = new Map([...spellings].map(([k, m]) => [k, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
+    for (const r of rows) {
+      const label = biCanonicalValue(p, id, r[id]);
+      if (label) r[id] = best.get(biFoldText(label));
+    }
+  }
+  return rows;
+}
 let biCrossFilters = {},
   visualDraft = null,
   visualPreview = null;
@@ -387,12 +435,11 @@ function visualData(p, rs, c) {
       error:
         'Para linha ou área, escolha uma coluna de data. Os pontos mostram os registros por data, sem criar uma série histórica de execução.',
     };
-  const stacked = ['stacked', 'stacked_h', 'stacked100', 'stacked100_h', 'heatmap'].includes(
-    c.type
-  );
+  const stacked = SERIES_CHART_TYPES.includes(c.type),
+    grouped = GROUPED_CHART_TYPES.includes(c.type);
   if (stacked && !p.fields.some((f) => f.id === c.series))
-    return { error: 'Escolha uma segunda coluna para compor os segmentos/eixos cruzados.' };
-  if (stacked && !['count', 'sum'].includes(c.agg))
+    return { error: 'Escolha o campo em "Dividir cada barra por" para cruzar com a categoria.' };
+  if (stacked && !grouped && !['count', 'sum'].includes(c.agg))
     return {
       error:
         'Cruzamento/empilhamento requer soma ou contagem. Para comparar médias, escolha barras simples.',
@@ -487,6 +534,7 @@ function visualData(p, rs, c) {
     matrix2,
     full,
     stacked,
+    grouped,
     dateOmitted: originalRows - rs.length,
     format: selectedVisualFormat(p, c),
   };
@@ -898,7 +946,7 @@ function visualOptions(p, rs, c, d) {
       },
     ];
   } else {
-    const horizontal = ['barh', 'stacked_h', 'stacked100_h'].includes(c.type),
+    const horizontal = ['barh', 'stacked_h', 'stacked100_h', 'grouped_h'].includes(c.type),
       isLine = ['line', 'area'].includes(c.type),
       axisCat = {
         type: 'category',
@@ -906,8 +954,8 @@ function visualOptions(p, rs, c, d) {
         axisTick: { show: false },
         axisLine: { lineStyle: { color: '#e1e9ee' } },
         axisLabel: {
-          color: '#6e8794',
-          fontSize: 10,
+          color: '#5d7684',
+          fontSize: 11,
           interval: 0,
           width: horizontal ? 160 : 92,
           overflow: 'truncate',
@@ -921,8 +969,8 @@ function visualOptions(p, rs, c, d) {
         min: is100 ? 0 : undefined,
         max: is100 ? 100 : undefined,
         axisLabel: {
-          fontSize: 9,
-          color: '#8da0ab',
+          fontSize: 11,
+          color: '#6e8794',
           formatter: (v) =>
             is100
               ? v + '%'
@@ -986,15 +1034,15 @@ function visualOptions(p, rs, c, d) {
             value: display,
             itemStyle: {
               color: d.stacked ? colors[index] : semanticVisualColor(cats[i], i, c.palette),
-              borderRadius: d.stacked ? 0 : horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0],
+              borderRadius: d.stacked && !d.grouped ? 0 : horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0],
             },
           };
         });
         return {
           name: d.stacked ? name : c.title,
           type: isLine ? 'line' : 'bar',
-          stack: d.stacked ? 'project-total' : undefined,
-          barMaxWidth: horizontal ? 25 : 52,
+          stack: d.stacked && !d.grouped ? 'project-total' : undefined,
+          barMaxWidth: d.grouped ? (horizontal ? 14 : 26) : horizontal ? 25 : 52,
           barMinHeight: 0,
           connectNulls: false,
           smooth: false,
@@ -1003,11 +1051,12 @@ function visualOptions(p, rs, c, d) {
           areaStyle: c.type === 'area' ? { opacity: 0.14 } : undefined,
           label: {
             show: !!c.labels,
-            position: d.stacked ? 'inside' : horizontal ? 'right' : 'top',
+            position: d.stacked && !d.grouped ? 'inside' : horizontal ? 'right' : 'top',
             fontSize: 10,
-            color: d.stacked ? '#fff' : '#446b80',
+            color: d.stacked && !d.grouped ? '#fff' : '#446b80',
             formatter: (v) => {
               if (v.value == null) return '';
+              if (d.grouped && Number(v.value) === 0) return '';
               if (is100) return Number(v.value) >= 7 ? Number(v.value).toFixed(0) + '%' : '';
               return fmt(v.value);
             },
@@ -1119,7 +1168,7 @@ render = function () {
 const originalBiRowsVisuals = biRows;
 biRows = function (p) {
   return originalBiRowsVisuals(p).filter((r) =>
-    Object.entries(biCrossFilters).every(([field, value]) => visualCategory(r[field]) === value)
+    Object.entries(biCrossFilters).every(([field, value]) => biValueKey(p, field, r[field]) === biValueKey(p, field, value))
   );
 };
 const biFiltersBeforeVisuals = biFilters;
@@ -1434,6 +1483,7 @@ function fieldOptions(p, selected, types) {
     )
     .join('');
 }
+const COMMON_CHART_TYPES = ['barh', 'barv', 'grouped_h', 'grouped', 'stacked_h', 'stacked', 'donut', 'line'];
 function editVisual(id, key = '') {
   const p = visible().find((p) => p.id === id);
   if (!p || !canEdit(p)) return;
@@ -1447,17 +1497,18 @@ function editVisual(id, key = '') {
   const c = visualDraft.config;
   modal(
     existing ? 'Editar gráfico' : 'Adicionar gráfico',
-    `<div class="chart-editor-layout"><form id="chartEditorForm" oninput="updateVisualDraft()" onchange="updateVisualDraft()" onsubmit="event.preventDefault();saveVisual()"><div class="field"><label>Nome do gráfico *</label><input name="title" aria-label="Nome do gráfico" required value="${esc(c.title)}"></div>${typographyFields(c)}<div class="field"><label>Texto de apoio</label><input name="subtitle" aria-label="Texto de apoio do gráfico" value="${esc(c.subtitle || '')}" placeholder="Explique em uma frase o que deve ser observado"></div><div class="field"><label>Tipo de gráfico</label><select name="type" aria-label="Tipo de gráfico">${Object.entries(
-      visualTypes
-    )
-      .map(([k, n]) => `<option value="${k}" ${c.type === k ? 'selected' : ''}>${n}</option>`)
+    `<div class="chart-editor-layout"><form id="chartEditorForm" oninput="updateVisualDraft()" onchange="updateVisualDraft()" onsubmit="event.preventDefault();saveVisual()"><div class="field"><label>Nome do gráfico *</label><input name="title" aria-label="Nome do gráfico" required value="${esc(c.title)}"></div>${typographyFields(c)}<div class="field"><label>Texto de apoio</label><input name="subtitle" aria-label="Texto de apoio do gráfico" value="${esc(c.subtitle || '')}" placeholder="Explique em uma frase o que deve ser observado"></div><div class="field"><label>Tipo de gráfico</label><select name="type" aria-label="Tipo de gráfico">${[
+      ['Mais usados', COMMON_CHART_TYPES],
+      ['Outros tipos', Object.keys(visualTypes).filter((k) => !COMMON_CHART_TYPES.includes(k))],
+    ]
+      .map(([group, keys]) => `<optgroup label="${group}">${keys.map((k) => `<option value="${k}" ${c.type === k ? 'selected' : ''}>${visualTypes[k]}</option>`).join('')}</optgroup>`)
       .join(
         ''
-      )}</select></div><div class="field" id="categoryField"><label>Categoria · eixo ou fatias</label><select name="category" aria-label="Coluna da categoria"><option value="">Selecione a coluna...</option>${fieldOptions(
+      )}</select><small>Para comparar dois campos (ex.: status por órgão), use <b>barras agrupadas</b> ou <b>empilhadas</b>.</small></div><div class="field" id="categoryField"><label>Categoria · eixo ou fatias</label><select name="category" aria-label="Coluna da categoria"><option value="">Selecione a coluna...</option>${fieldOptions(
       p,
       c.category,
       p.fields.map((f) => f.type).filter((t) => !['long', 'link'].includes(t))
-    )}</select></div><div class="field" id="seriesField"><label>Segmentos do empilhamento</label><select name="series" aria-label="Coluna dos segmentos"><option value="">Selecione uma segunda coluna...</option>${fieldOptions(p, c.series, ['select', 'text', 'responsible', 'boolean'])}</select><small>Ex.: órgão no eixo e macroetapa nos segmentos.</small></div><div class="twocol"><div class="field"><label>Como calcular</label><select name="agg" aria-label="Cálculo do gráfico">${Object.entries(
+    )}</select></div><div class="field" id="seriesField"><label>Dividir cada barra por</label><select name="series" aria-label="Coluna dos segmentos"><option value="">Selecione uma segunda coluna...</option>${fieldOptions(p, c.series, ['select', 'text', 'responsible', 'boolean'])}</select><small>Ex.: órgão na categoria e status aqui. Cada status vira uma cor.</small></div><div class="twocol"><div class="field"><label>Como calcular</label><select name="agg" aria-label="Cálculo do gráfico">${Object.entries(
       aggregationNames
     )
       .map(([k, n]) => `<option value="${k}" ${c.agg === k ? 'selected' : ''}>${n}</option>`)
@@ -1497,7 +1548,7 @@ function editVisual(id, key = '') {
       .map(([k, n]) => `<option value="${k}" ${c.palette === k ? 'selected' : ''}>${n}</option>`)
       .join(
         ''
-      )}</select></div></div><div class="visual-checkboxes"><label><input name="labels" type="checkbox" ${c.labels ? 'checked' : ''}>Exibir valores no gráfico</label><label><input name="legend" type="checkbox" ${c.legend !== false ? 'checked' : ''}>Exibir legenda</label><label><input name="wide" type="checkbox" ${c.wide ? 'checked' : ''}>Usar largura total do painel</label></div></form><aside class="chart-editor-preview"><div class="eyebrow">PRÉVIA COM OS DADOS DO PROJETO</div><h3 id="chartPreviewTitle">${esc(c.title)}</h3><p id="chartPreviewSubtitle">${esc(c.subtitle || '')}</p><div id="chartEditorPreview"></div><div id="chartConfigError" class="chart-config-error" role="status"></div><div class="chart-preview-help">${icon('eye')}<span>A prévia acompanha os filtros atuais. As alterações serão aplicadas ao salvar o gráfico.</span></div><div class="chart-type-help"><b>Escolha pelo que quer entender</b><p>Rosca e pizza mostram composição. Barras comparam categorias. Empilhamento cruza duas colunas. Linha e área organizam registros por data. Mapa de árvore mostra proporções. Funil, medidor, radar, calor, cascata e combinado ampliam a análise.</p></div></aside></div>`,
+      )}</select></div></div><div class="visual-checkboxes"><label><input name="labels" type="checkbox" ${c.labels ? 'checked' : ''}>Exibir valores no gráfico</label><label><input name="legend" type="checkbox" ${c.legend !== false ? 'checked' : ''}>Exibir legenda</label><label><input name="wide" type="checkbox" ${c.wide ? 'checked' : ''}>Usar largura total do painel</label></div></form><aside class="chart-editor-preview"><div class="eyebrow">PRÉVIA COM OS DADOS DO PROJETO</div><h3 id="chartPreviewTitle">${esc(c.title)}</h3><p id="chartPreviewSubtitle">${esc(c.subtitle || '')}</p><div id="chartEditorPreview"></div><div id="chartConfigError" class="chart-config-error" role="status"></div><div class="chart-preview-help">${icon('eye')}<span>A prévia acompanha os filtros atuais. As alterações serão aplicadas ao salvar o gráfico.</span></div><div class="chart-type-help"><b>Escolha pelo que quer entender</b><p>Rosca e pizza mostram composição. Barras comparam categorias. Barras agrupadas ou empilhadas cruzam dois campos. Linha e área organizam registros por data. Mapa de árvore mostra proporções. Funil, medidor, radar, calor, cascata e combinado ampliam a análise.</p></div></aside></div>`,
     (existing ? btn('Remover gráfico', 'removeVisual()', 'trash') : '') +
       btn('Voltar', 'closeModal()', 'arrow') +
       `<button class="btn primary" form="chartEditorForm" type="submit">${icon('check')}Salvar gráfico</button>`
@@ -1553,9 +1604,10 @@ function validateVisualConfig(p, c) {
   }
   if (['line', 'area'].includes(c.type) && f.type !== 'date')
     return 'Linha e área precisam de uma coluna de data como categoria.';
-  if (['stacked', 'stacked_h', 'stacked100', 'stacked100_h', 'heatmap'].includes(c.type)) {
-    if (!c.series) return 'Selecione a coluna dos segmentos / cruzamento.';
-    if (!['count', 'sum'].includes(c.agg))
+  if (SERIES_CHART_TYPES.includes(c.type)) {
+    if (!c.series) return 'Escolha o campo em "Dividir cada barra por".';
+    if (c.series === c.category) return 'Escolha em "Dividir cada barra por" um campo diferente da categoria.';
+    if (!GROUPED_CHART_TYPES.includes(c.type) && !['count', 'sum'].includes(c.agg))
       return 'Use soma ou contagem para empilhamento ou mapa de calor.';
   }
   return '';
@@ -1567,13 +1619,19 @@ function updateVisualDraft() {
   if (!p || !c) return;
   visualDraft.config = c;
   const form = $('#chartEditorForm'),
-    stacked = ['stacked', 'stacked_h', 'stacked100', 'stacked100_h', 'heatmap'].includes(c.type),
+    stacked = SERIES_CHART_TYPES.includes(c.type),
     isCombo = c.type === 'combo',
     isGauge = c.type === 'gauge';
-  if ($('#categoryField')) $('#categoryField').style.display = isGauge ? 'none' : 'block';
+  // Com o seletor de categoria novo (topic-builder), o seletor antigo fica sempre escondido.
+  if ($('#categoryField'))
+    $('#categoryField').style.display = isGauge || $('#compoundCategoryEditor') ? 'none' : 'block';
+  if ($('#compoundCategoryEditor')) $('#compoundCategoryEditor').style.display = isGauge ? 'none' : '';
   $('#seriesField').style.display = stacked ? 'block' : 'none';
   if ($('#comboFields')) $('#comboFields').style.display = isCombo ? 'grid' : 'none';
   form.elements.value.disabled = c.agg === 'count';
+  // Na contagem não há coluna de medida: o campo some em vez de ficar desativado.
+  const valueBox = form.elements.value.closest('.field');
+  if (valueBox) valueBox.style.display = c.agg === 'count' ? 'none' : '';
   if (form.elements.value2) form.elements.value2.disabled = (c.agg2 || 'sum') === 'count';
   for (const option of form.elements.value.options) {
     const f = p.fields.find((f) => f.id === option.value);
@@ -1591,6 +1649,16 @@ function updateVisualDraft() {
   }
   $('#chartPreviewTitle').textContent = c.title || 'Seu gráfico';
   $('#chartPreviewSubtitle').textContent = c.subtitle;
+  // A prévia também mostra o tamanho e a cor escolhidos para o título e o texto de apoio.
+  const custom = !!c.customTypography;
+  Object.assign($('#chartPreviewTitle').style, {
+    fontSize: custom ? c.titleFontSize + 'px' : '',
+    color: custom ? c.fontColor : '',
+  });
+  Object.assign($('#chartPreviewSubtitle').style, {
+    fontSize: custom ? c.fontSize + 'px' : '',
+    color: custom ? c.fontColor : '',
+  });
   const old = $('#chartEditorPreview .echart-canvas');
   if (old && typeof echarts !== 'undefined') {
     const instance = echarts.getInstanceByDom(old);

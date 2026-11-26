@@ -878,7 +878,15 @@ async function exportBackup(sb, owner) {
     ? jsonResponse(500, { error: ownedAgenda.error.message })
     : jsonResponse(200, { items: (ownedAgenda.data || []).map((row) => row.body) });
   if (!agenda.ok) return agenda;
-  const items = await agenda.json();
+  const { items } = await agenda.json();
+  // Antes a função terminava aqui sem devolver nada e o botão "Exportar backup" falhava.
+  // O arquivo segue o formato que a restauração espera (secap-server-v1) e inclui as obras.
+  return jsonResponse(200, {
+    format: 'secap-server-v1',
+    exportedAt: new Date().toISOString(),
+    state: fullState,
+    private_calendar: items,
+  });
 }
 
 async function saveState(sb, owner, path, data) {
@@ -902,6 +910,15 @@ async function saveState(sb, owner, path, data) {
   if (activeAdminCount(state) !== 1) {
     return jsonResponse(400, { error: 'O administrador principal deve permanecer ativo.' });
   }
+
+  // Na restauração, as obras do arquivo são regravadas na tabela 'obras' (antes eram descartadas
+  // e o backup voltava sem nenhuma obra). Só grava/atualiza: obras criadas depois do backup ficam.
+  const restoredWorks =
+    path === '/api/restore' && state && Array.isArray(state.projects)
+      ? state.projects
+          .filter((p) => p && p.id && Array.isArray(p.records) && p.records.length)
+          .map((p) => ({ projectId: p.id, records: p.records.filter((r) => r && r.id) }))
+      : [];
 
   // IMPORTANTE: Removemos os records das obras de cada projeto antes de salvar no app_state.
   // As obras passam a ser armazenadas exclusivamente na tabela 'public.obras' do Supabase.
@@ -942,7 +959,18 @@ async function saveState(sb, owner, path, data) {
       if (inserted.error) return jsonResponse(400, { error: inserted.error.message });
     }
   }
-  return jsonResponse(200, { ok: true });
+  for (const group of restoredWorks) {
+    // Em lotes, para não estourar o tamanho de uma requisição em projetos grandes.
+    for (let i = 0; i < group.records.length; i += 200) {
+      const rows = group.records.slice(i, i + 200).map((r) => recordToObraRow(group.projectId, r));
+      const { error } = await sb.from('obras').upsert(rows);
+      if (error)
+        return jsonResponse(400, {
+          error: `Dados gerais restaurados, mas as obras do projeto ${group.projectId} falharam: ${error.message}`,
+        });
+    }
+  }
+  return jsonResponse(200, { ok: true, obras: restoredWorks.reduce((n, g) => n + g.records.length, 0) });
 }
 
 // Atualiza a tela de carregamento do login (loading-screen.js), quando visível.
