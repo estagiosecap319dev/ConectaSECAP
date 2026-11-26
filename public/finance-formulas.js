@@ -332,31 +332,57 @@ function finOrder(list) {
 
 // ---------------------------------------------------------------- modelo da planilha
 // As fórmulas da aba PIPELINE, montadas com os campos do projeto (pelo id ou pelo nome).
+// Cada campo do modelo é achado pelo nome da coluna na planilha ou, se não houver, pelo código
+// da primeira pasta de obras (pastas criadas por importação ganham códigos próprios, ex.: f_recursosfederais2026_0ae2).
+const FIN_PRESET_FIELDS = {
+  valor: ['valor', 'valorestimadoexecucaoobra'],
+  inicio: ['prev_mobilizacao', 'previsaomobilizacao'],
+  dias: ['f_previsaoexecucaodias_e9fa', 'previsaoexecucaodias'],
+  federal_total: ['federal_total', 'valoresrecursosfederais'],
+  municipal_total: ['municipal_total', 'valorrecursosmunicipais'],
+  outros_total: ['outros_total', 'valorrecursosoutros'],
+  solicitacao: ['f_valorcomsolicitacaofinanceira_2010', 'valorcomsolicitacaofinanceira'],
+  total_2026: ['total_2026', 'valorsubtotal2026'],
+  total_2027: ['total_2027', 'valorsubtotal2027'],
+  total_2028: ['total_2028', 'valorsubtotal2028'],
+  valor_total: ['valor_total', 'valortotal'],
+};
+const FIN_PRESET_SOURCE_NAMES = { federal: 'federais', municipal: 'municipais', outros: 'outros' };
+for (const src of ['federal', 'municipal', 'outros'])
+  for (const y of [2026, 2027, 2028])
+    FIN_PRESET_FIELDS[`${src}_${y}`] = [`${src}_${y}`, `recursos${FIN_PRESET_SOURCE_NAMES[src]}${y}`];
+function financeSheetPresetFields(p) {
+  const fields = p?.fields || [];
+  const ids = {};
+  for (const [role, [legacyId, nameKey]] of Object.entries(FIN_PRESET_FIELDS)) {
+    const f = fields.find((x) => finKey(x.name) === nameKey) || fields.find((x) => String(x.id) === legacyId);
+    if (!f) return null;
+    ids[role] = String(f.id);
+  }
+  return ids;
+}
 function financeSheetPreset(p) {
-  const has = (id) => (p.fields || []).some((f) => String(f.id) === id);
-  const need = ['valor', 'prev_mobilizacao', 'f_previsaoexecucaodias_e9fa', 'federal_total', 'municipal_total', 'outros_total',
-    'f_valorcomsolicitacaofinanceira_2010', 'total_2026', 'total_2027', 'total_2028', 'valor_total'];
-  for (const src of ['federal', 'municipal', 'outros']) for (const y of [2026, 2027, 2028]) need.push(`${src}_${y}`);
-  if (!need.every(has)) return null;
-  const AL = 'f_valorcomsolicitacaofinanceira_2010';
-  const yearSum = (y) => ({ t: 'sum', f: [`federal_${y}`, `municipal_${y}`, `outros_${y}`] });
+  const F = financeSheetPresetFields(p);
+  if (!F) return null;
+  const AL = F.solicitacao;
+  const yearSum = (y) => ({ t: 'sum', f: [F[`federal_${y}`], F[`municipal_${y}`], F[`outros_${y}`]] });
   const noRequest = { t: 'cmp', o: '=', a: { t: 'ref', f: AL }, b: { t: 'num', v: 0 } };
-  const split = (y) => ({ t: 'split', y, v: 'valor', s: 'prev_mobilizacao', d: 'f_previsaoexecucaodias_e9fa' });
+  const split = (y) => ({ t: 'split', y, v: F.valor, s: F.inicio, d: F.dias });
   const minus = (a, b) => ({ t: 'op', o: '-', a, b });
   const mk = (target, ast) => ({ id: 'fin_' + target, target, kind: 'expression', ast, text: finFormat(p, ast), preset: true });
   return [
-    mk('federal_total', { t: 'sum', f: ['federal_2026', 'federal_2027', 'federal_2028'] }),
-    mk('municipal_total', { t: 'sum', f: ['municipal_2026', 'municipal_2027', 'municipal_2028'] }),
-    mk('outros_total', { t: 'sum', f: ['outros_2026', 'outros_2027', 'outros_2028'] }),
-    mk(AL, { t: 'sum', f: ['federal_total', 'municipal_total', 'outros_total'] }),
-    mk('total_2026', { t: 'if', c: noRequest, a: split(2026), b: yearSum(2026) }),
-    mk('total_2027', { t: 'if', c: noRequest, a: split(2027), b: yearSum(2027) }),
-    mk('total_2028', {
+    mk(F.federal_total, { t: 'sum', f: [F.federal_2026, F.federal_2027, F.federal_2028] }),
+    mk(F.municipal_total, { t: 'sum', f: [F.municipal_2026, F.municipal_2027, F.municipal_2028] }),
+    mk(F.outros_total, { t: 'sum', f: [F.outros_2026, F.outros_2027, F.outros_2028] }),
+    mk(AL, { t: 'sum', f: [F.federal_total, F.municipal_total, F.outros_total] }),
+    mk(F.total_2026, { t: 'if', c: noRequest, a: split(2026), b: yearSum(2026) }),
+    mk(F.total_2027, { t: 'if', c: noRequest, a: split(2027), b: yearSum(2027) }),
+    mk(F.total_2028, {
       t: 'if', c: noRequest,
-      a: { t: 'fn', n: 'max', args: [{ t: 'num', v: 0 }, minus(minus({ t: 'ref', f: 'valor' }, { t: 'ref', f: 'total_2026' }), { t: 'ref', f: 'total_2027' })] },
+      a: { t: 'fn', n: 'max', args: [{ t: 'num', v: 0 }, minus(minus({ t: 'ref', f: F.valor }, { t: 'ref', f: F.total_2026 }), { t: 'ref', f: F.total_2027 })] },
       b: yearSum(2028),
     }),
-    mk('valor_total', { t: 'sum', f: ['total_2026', 'total_2027', 'total_2028'] }),
+    mk(F.valor_total, { t: 'sum', f: [F.total_2026, F.total_2027, F.total_2028] }),
   ];
 }
 
