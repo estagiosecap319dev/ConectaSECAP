@@ -22,7 +22,9 @@ Quando alguém importa obras por um link do Google Sheets e deixa marcada a opç
 "Manter portal e planilha sincronizados", o projeto recebe "sheetSync" em app_state
 (planilhaId, campoId). Cada ciclo sincroniza também todos esses projetos, cada um com
 a própria base (chave planilha|projeto). Na primeira sincronia de um projeto conectado,
-as diferenças são resolvidas a favor do portal (os dados acabaram de vir da planilha).
+as diferenças são resolvidas a favor da planilha: ao conectar um projeto que já existia,
+edições feitas na planilha depois da importação não são apagadas (num projeto recém-importado
+os dois lados são iguais). Obras que só existem no portal ficam só no relatório.
 A planilha precisa estar compartilhada como Editor com o e-mail da conta de serviço.
 
 Configuração: data/sheet-sync.json (ver LEIA-ME-SINCRONIA-PLANILHA.md). Para sincronizar
@@ -773,7 +775,7 @@ def project_configs(base, portal):
             continue
         cfg = dict(base)
         cfg.update(planilha_id=str(link['planilhaId']), projeto_id=str(p.get('id')), aba=str(link.get('aba') or ''),
-                   campo_id=str(link['campoId']), primeira_sincronia='portal', _nome=p.get('name') or '')
+                   campo_id=str(link['campoId']), primeira_sincronia='planilha', _nome=p.get('name') or '')
         out.append(cfg)
     return out
 
