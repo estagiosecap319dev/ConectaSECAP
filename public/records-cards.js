@@ -107,7 +107,8 @@
       sei: mdField(p, ['sei', 'processosei', 'numerosei']),
       responsavel: mdField(p, ['responsavelacompanhamento', 'responsavel'], 'owner'),
       tipo: mdField(p, ['tipo', 'tipodeobra', 'tipodaobra', 'tipoprojeto', 'tipodeprojeto']),
-      observacao: mdField(p, ['observacao', 'observacoes', 'notadeacompanhamento', 'obs']),
+      valor: mdField(p, ['valorestimadoexecucaoobra', 'valor', 'valorprevisto', 'investimento', 'investimentoprevisto', 'valortotal'], 'budget'),
+      avanco: mdField(p, ['execucao', 'avancofisico', 'progresso', 'percentualexecucao', 'percentualexecutado'], 'progress'),
       inicio: mdField(p, ['datainicio', 'datainiciodoprojetochegadadademandanasecap', 'previsaoplanejamento', 'inicio'], 'startDate'),
       fim: mdField(p, ['prazo', 'previsaoencerramento', 'datafim', 'termino'], 'deadline'),
     };
@@ -124,6 +125,18 @@
     var m = /^(\d{4})-(\d{2})/.exec(iso || '');
     if (!m) return '';
     return ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][Number(m[2]) - 1] + '/' + m[1];
+  }
+  function mdMoney(r, f) {
+    var raw = f ? r[f.id] : '';
+    if (raw === '' || raw == null) return '—';
+    var n = typeof parseCurrencyInput === 'function' ? parseCurrencyInput(String(raw)) : Number(raw);
+    return n == null || !isFinite(n) ? String(raw) : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function mdPercent(r, f) {
+    var raw = f ? r[f.id] : '';
+    var n = typeof physicalProgress === 'function' ? physicalProgress(raw) : Number(raw);
+    if (n == null || !isFinite(n)) return '—';
+    return Number(n).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '%';
   }
   function mdCanEditField(p, r, f) {
     if (!f || !canEdit(p)) return false;
@@ -147,11 +160,13 @@
     var status = typeof workSituation === 'function' ? workSituation(r, p) : canonicalStatus(val(r, p, 'status'));
     if (!status || status === 'Não informado') status = 'Ainda não definido';
     var inicio = mdMonth(F.inicio ? r[F.inicio.id] : ''), fim = mdMonth(F.fim ? r[F.fim.id] : '');
-    var obs = F.observacao, canObs = mdCanEditField(p, r, obs);
-    var obsHtml = obs
-      ? '<div class="md-obs"><div class="md-obs-head"><span>' + icon('edit') + ' ' + esc(obs.name || 'Observação') + '</span><span class="md-obs-state" id="mdObsState">' + (canObs ? '● Salvamento automático ativo' : 'Somente leitura') + '</span></div>' +
-        '<textarea id="mdObs" rows="4" ' + (canObs ? '' : 'readonly') + ' data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" data-original="' + esc(mdText(r, obs)) + '" oninput="mdObsTyping(this)" onblur="mdObsSave(this)" placeholder="Sem observação registrada.">' + esc(mdText(r, obs)) + '</textarea></div>'
-      : '';
+    var pct = mdPercent(r, F.avanco), pctNum = parseFloat(String(pct).replace(',', '.'));
+    var extraHtml =
+      '<div class="md-grid md-grid-2">' +
+      cell((F.valor && F.valor.name) || 'Investimento', '<b class="md-money">' + esc(mdMoney(r, F.valor)) + '</b>') +
+      cell((F.avanco && F.avanco.name) || 'Avanço físico', '<b>' + esc(pct) + '</b>' + (isFinite(pctNum) ? '<span class="md-bar"><i style="width:' + Math.max(0, Math.min(100, pctNum)) + '%"></i></span>' : '')) +
+      '</div>' +
+      '<button type="button" class="md-all" data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" onclick="editRecord(this.dataset.pid, this.dataset.rid)">' + icon('eye') + ' Ver todos os campos</button>';
     return '<div class="md-detail-head"><div><span class="md-detail-tag"><span class="md-id is-dark">ID ' + esc(mdText(r, F.id) || '—') + '</span>' + esc(p.name) + (mdText(r, F.orgao) ? ' · ' + esc(mdText(r, F.orgao)) : '') + '</span>' +
       '<h3>' + esc(recordTitle(r, p)) + '</h3></div>' +
       '<button type="button" class="md-open" data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" onclick="editRecord(this.dataset.pid, this.dataset.rid)">Abrir obra completa →</button></div>' +
@@ -162,7 +177,7 @@
       cell((F.sei && F.sei.name) || 'Processo SEI', sei ? '<span class="md-sei"><code>' + esc(sei) + '</code><button type="button" class="iconbtn" title="Copiar número do processo" aria-label="Copiar número do processo" data-copy="' + esc(sei) + '" onclick="mdCopy(this.dataset.copy)">' + icon('file') + '</button></span>' : plain('')) +
       cell((F.responsavel && F.responsavel.name) || 'Responsável', plain(mdText(r, F.responsavel))) +
       cell('Tipo / Região', '<b class="md-small">' + esc(tipoRegiao || '—') + '</b>') +
-      '</div>' + obsHtml +
+      '</div>' + extraHtml +
       '<footer class="md-detail-foot"><span>Cronograma previsto: <b>' + esc(inicio && fim ? inicio + ' - ' + fim : inicio || fim || 'não informado') + '</b></span><span>Status: <b>' + esc(status) + '</b></span></footer>';
   }
   function masterDetail(rs, p) {
@@ -181,8 +196,6 @@
     var p = visible().find(function (x) { return x.id === pid; });
     var r = p && (p.records || []).find(function (x) { return String(x.id) === String(rid); });
     if (!r) return;
-    var area = document.getElementById('mdObs');
-    if (area && area.value !== area.dataset.original) mdObsSave(area);
     mdSelected[pid] = rid;
     document.querySelectorAll('.md-item').forEach(function (b) { var on = b.dataset.rid === String(rid); b.classList.toggle('is-selected', on); b.setAttribute('aria-selected', on); if (on) b.scrollIntoView({ block: 'nearest' }); });
     var detail = document.getElementById('mdDetail');
@@ -201,39 +214,5 @@
   window.mdCopy = function (text) {
     var done = function () { notify('Número do processo copiado.'); };
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, done); else done();
-  };
-  var mdTimer = null;
-  window.mdObsTyping = function (area) {
-    if (area.readOnly) return;
-    var state = document.getElementById('mdObsState');
-    if (state) state.textContent = '● Digitando…';
-    clearTimeout(mdTimer);
-    mdTimer = setTimeout(function () { window.mdObsSave(area); }, 1200);
-  };
-  window.mdObsSave = function (area) {
-    clearTimeout(mdTimer);
-    if (!area || area.readOnly) return;
-    var p = db.projects.find(function (x) { return x.id === area.dataset.pid; });
-    var r = p && (p.records || []).find(function (x) { return String(x.id) === area.dataset.rid; });
-    var f = p && mdFields(p).observacao;
-    var state = document.getElementById('mdObsState');
-    if (!r || !f || !mdCanEditField(p, r, f)) return;
-    var value = area.value, old = r[f.id] == null ? '' : String(r[f.id]);
-    if (value === old) { if (state && document.getElementById('mdObs') === area) state.textContent = '● Salvamento automático ativo'; return; }
-    r[f.id] = value;
-    area.dataset.original = value;
-    persist('Alterou ' + f.name, p, old, value, f.name, !!window.SECAP_OBRAS_BACKEND);
-    if (state) state.textContent = '● Salvando…';
-    var finish = function (ok) {
-      if (!ok && r[f.id] === value) {
-        // O banco recusou: a obra volta ao valor anterior e o texto fica pendente para nova tentativa.
-        r[f.id] = old;
-        area.dataset.original = old;
-      }
-      var s = document.getElementById('mdObsState');
-      if (s && document.getElementById('mdObs') === area) s.textContent = ok ? '● Salvo às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '● Não foi possível salvar';
-    };
-    if (window.SECAP_OBRAS_BACKEND) Promise.resolve(window.SECAP_OBRAS_BACKEND.saveObra(p.id, r)).then(function (res) { finish(!res || res.ok !== false); }, function () { finish(false); });
-    else finish(true);
   };
 })();
