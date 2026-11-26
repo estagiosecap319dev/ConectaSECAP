@@ -1307,3 +1307,42 @@ body.menu-collapsed .sidebar-resizer {
   min-height: 40px;
   align-items: center;
 }
+
+/* Detalhes da obra: topo com respiro. Antes, a linha "PROJETO · OBRA X DE Y" ficava colada no
+   topo, o título de duas linhas tinha entrelinha curta e o bloco encostava no "Voltar às obras". */
+#fullscreenDetailView .fullscreen-header {
+  padding: 18px 32px !important;
+  align-items: center;
+  /* A página é uma coluna flexível de altura fixa: sem isto o cabeçalho encolhia para 88px
+     e o título de duas linhas vazava por cima dos cartões. */
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: 96px !important;
+}
+#fullscreenDetailView .fullscreen-header > div:first-child {
+  gap: 22px !important;
+  min-width: 0;
+}
+#fullscreenDetailView .fullscreen-header > div:first-child > div {
+  min-width: 0;
+  padding-left: 22px;
+  border-left: 1px solid #dfe7ec;
+}
+#fullscreenDetailView .fullscreen-header .eyebrow {
+  display: block;
+  margin: 0 0 6px !important;
+  letter-spacing: 0.6px;
+  line-height: 1.4;
+}
+#fullscreenDetailView .obra-detail-title {
+  margin: 0 !important;
+  font-size: 19px;
+  line-height: 1.4 !important;
+}
+@media (max-width: 1100px) {
+  /* Telas estreitas: "Voltar às obras" fica acima do título; a linha separadora não é necessária. */
+  #fullscreenDetailView .fullscreen-header > div:first-child > div {
+    padding-left: 0;
+    border-left: 0;
+  }
+}

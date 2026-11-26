@@ -2335,9 +2335,6 @@ editRecord = function (pid, rid = '') {
               <h2 style="margin: 0;">${icon(getGroupIcon(g))} ${esc(g)}</h2>
               <span class="count-badge">${groupFields.length} campos</span>
             </div>
-            <button type="button" class="btn secondary small" onclick="closeFullscreenDetail(); editFields('${pid}', '${esc(g).replace(/'/g, "\\'")}')">
-              ${icon('edit')} ${isSysAdmin() ? 'Editar campos da seção' : 'Organizar seção'}
-            </button>
           </div>
           <div class="detail-grid" style="--sec-color: ${theme.color};">
             ${groupFields
