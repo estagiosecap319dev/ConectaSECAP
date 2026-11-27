@@ -2,10 +2,10 @@
    SECAP · CANCELAR A EDIÇÃO DE UMA OBRA
    Antes: "Cancelar" com algo digitado levava à tela de justificativas, que só
    permitia salvar; o X, o clique fora e a tecla Esc fechavam sem perguntar.
-   Agora, se houver alteração ainda não salva, aparece "Tem certeza que deseja
-   cancelar?". Ao confirmar, as alterações não salvas são descartadas (nada é
-   gravado). Com uma obra já salva aguardando justificativa, "Cancelar" (e X/Esc no
-   formulário) também sai: o que foi salvo fica salvo, sem passar pelas justificativas.
+   Agora "Salvar alterações" só guarda as mudanças; elas são gravadas ao concluir as
+   justificativas. Sair sem justificar (Cancelar, X, clique fora ou Esc, no formulário
+   ou na janela de justificativas) pergunta "Tem certeza que deseja sair sem a
+   justificativa?": "Voltar" mantém tudo; "Descartar alterações" joga fora (nada é gravado).
    ============================================================================ */
 
 // Projeto e obra do formulário aberto (lidos do onsubmit do #recordForm).
@@ -47,20 +47,21 @@ function confirmDiscardRecordChanges(unsaved) {
     const fields = unsaved.reduce((n, item) => n + (item.changes?.length || 0), 0);
     const obras = unsaved.length;
     const detail =
-      obras > 1
-        ? `Há alterações não salvas em <b>${obras} obras</b> (${fields} campo(s)). Elas serão descartadas.`
-        : `Há <b>${fields} campo(s)</b> alterado(s) nesta obra que ainda não foram salvos. Eles serão descartados.`;
+      (obras > 1
+        ? `Há alterações em <b>${obras} obras</b> (${fields} campo(s)) que ainda não foram salvas.`
+        : `Há <b>${fields} campo(s)</b> alterado(s) que ainda não foram salvos.`) +
+      ' As alterações só são salvas quando a justificativa é marcada. Se sair agora, elas serão descartadas.';
     const overlay = document.createElement('div');
     overlay.id = 'discardConfirm';
     overlay.className = 'discard-confirm-overlay';
     overlay.innerHTML = `
       <section class="discard-confirm" role="alertdialog" aria-modal="true" aria-labelledby="discardConfirmTitle" aria-describedby="discardConfirmText">
         <div class="discard-confirm-icon" aria-hidden="true">!</div>
-        <h2 id="discardConfirmTitle">Tem certeza que deseja cancelar?</h2>
+        <h2 id="discardConfirmTitle">Tem certeza que deseja sair sem a justificativa?</h2>
         <p id="discardConfirmText">${detail}</p>
         <div class="discard-confirm-actions">
-          <button type="button" class="btn" data-choice="stay">Continuar editando</button>
-          <button type="button" class="btn danger" data-choice="discard">Sim, descartar alterações</button>
+          <button type="button" class="btn" data-choice="stay">Voltar</button>
+          <button type="button" class="btn danger" data-choice="discard">Descartar alterações</button>
         </div>
       </section>`;
     const finish = (discard) => {
@@ -161,6 +162,57 @@ window.addEventListener(
     e.preventDefault();
     e.stopImmediatePropagation();
     handleCancelFromRecordForm(ids.pid, ids.rid);
+  },
+  true
+);
+
+// Janela de justificativas: X, clique fora ou Esc perguntam antes de sair. Nada foi gravado
+// ainda (só grava ao concluir), então "Descartar alterações" apenas joga fora o que foi editado.
+function sessionUnsavedList() {
+  if (typeof secapEditSession === 'undefined' || !secapEditSession.active) return [];
+  return [...secapEditSession.records.values()]
+    .filter((e) => !e.saved && e.changes?.size)
+    .map((e) => ({ rid: e.rid, changes: [...e.changes.values()] }));
+}
+let justificationExitBusy = false;
+async function confirmExitFromJustification() {
+  if (justificationExitBusy) return;
+  const unsaved = sessionUnsavedList();
+  const pid = secapEditSession.pid, rid = secapEditSession.currentRid;
+  if (!unsaved.length) return exitRecordEditing(pid, rid);
+  justificationExitBusy = true;
+  try {
+    if (!(await confirmDiscardRecordChanges(unsaved))) return;
+    discardUnsavedRecordChanges();
+    exitRecordEditing(pid, rid);
+    notify('Alterações descartadas. Nada foi salvo.');
+  } finally {
+    justificationExitBusy = false;
+  }
+}
+function justificationModalOpen() {
+  return !!document.querySelector('#modal #exitAuditForm') && !document.getElementById('discardConfirm');
+}
+window.addEventListener(
+  'click',
+  (e) => {
+    if (!justificationModalOpen()) return;
+    const closeBtn = e.target.closest?.('#modal .dialoghead .iconbtn');
+    const backdrop = e.target.matches?.('#modal > .overlay') && e.target === e.target.closest('.overlay');
+    if (!closeBtn && !backdrop) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    confirmExitFromJustification();
+  },
+  true
+);
+window.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key !== 'Escape' || !justificationModalOpen() || document.getElementById('adminUnmarkedExitDialog')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    confirmExitFromJustification();
   },
   true
 );

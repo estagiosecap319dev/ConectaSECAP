@@ -1474,6 +1474,9 @@ function stageObraChangesInSession(pid, rid, diffs, saved = false) {
 
 // Captura as alterações da obra que está aberta na tela neste momento
 function syncCurrentFormToSession() {
+  // Sem o formulário na tela (ex.: janela de justificativas aberta) não há o que sincronizar.
+  // Sincronizar "nada" apagaria as alterações guardadas da obra aberta por último.
+  if (!document.getElementById('recordForm')) return;
   if (secapEditSession.active && secapEditSession.pid) {
     const liveDiffs = collectCurrentFormDiffs(secapEditSession.pid, secapEditSession.currentRid);
     stageObraChangesInSession(secapEditSession.pid, secapEditSession.currentRid, liveDiffs, false);
@@ -1531,6 +1534,28 @@ function hasAnyPendingSessionChanges() {
     window.saveRecord = function (pid, rid = '') {
       const diffs = collectCurrentFormDiffs(pid, rid);
       const isSessionSave = secapEditSession.active && String(secapEditSession.pid) === String(pid);
+
+      // Obra existente: "Salvar alterações" NÃO grava no banco. As alterações ficam guardadas
+      // na sessão e só são gravadas ao concluir as justificativas ("Salvar tudo e concluir").
+      // Quem sair sem justificar escolhe entre voltar ou descartar (record-discard.js).
+      if (isSessionSave && rid && (diffs.length || hasAnyPendingSessionChanges())) {
+        const p = visible().find((project) => String(project.id) === String(pid));
+        if (!p || !canEdit(p)) return;
+        const allowed =
+          typeof getAllowedFieldsForCurrentUser === 'function'
+            ? getAllowedFieldsForCurrentUser(p.id)
+            : isSysAdmin()
+              ? null
+              : [];
+        if (allowed !== null && (!Array.isArray(allowed) || allowed.length === 0)) {
+          return notify('Você não possui campos liberados para edição neste projeto.');
+        }
+        stageObraChangesInSession(pid, rid, diffs, false);
+        openExitAuditChecklistModal(() => {
+          if (typeof render === 'function') render();
+        });
+        return;
+      }
 
       if (isSessionSave) {
         // Registra a obra na sessão antes do salvamento individual. O salvamento
@@ -1743,7 +1768,8 @@ function openExitAuditChecklistModal(onCompleteExit) {
          ${icon('shield')}
          <p style="font-size: 12.5px;">
            <strong>Marque em cada obra se houve alteração ou não.</strong> Nada vem marcado: a marcação é sua e fica registrada na auditoria.${isSysAdmin() ? ' Para administradores a marcação é opcional.' : ''}<br>
-           Nesta sessão, ${changed.length} obra(s) foram editadas (${totalFieldsChanged} campo(s)). Depois de marcar, você pode adicionar uma justificativa (opcional).
+           Nesta sessão, ${changed.length} obra(s) foram editadas (${totalFieldsChanged} campo(s)). Depois de marcar, você pode adicionar uma justificativa (opcional).<br>
+           <strong>As alterações só são salvas ao clicar em “Salvar tudo e concluir”.</strong>
          </p>
        </div>
        ${obraReviewLegendHtml()}
@@ -2064,7 +2090,7 @@ async function submitExitAuditChecklist() {
 
   notify(
     autoSavedCount > 0
-      ? `${autoSavedCount} obra(s) salva(s) automaticamente e revisão registrada na auditoria.`
+      ? `${autoSavedCount} obra(s) salva(s) e revisão registrada na auditoria.`
       : 'Revisão das obras registrada na auditoria.'
   );
 
