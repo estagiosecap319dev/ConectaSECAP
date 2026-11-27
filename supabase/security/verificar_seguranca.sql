@@ -49,5 +49,9 @@ with checks(item, ok) as (
   select 'Sincronia da planilha só pelo servidor (secap_sheet_sync_apply)',
          not has_function_privilege('authenticated','public.secap_sheet_sync_apply(text,jsonb,jsonb,text)','EXECUTE')
          or (select prosrc like '%service_role%' from pg_proc where proname='secap_sheet_sync_apply' limit 1)
+  -- 8) Só administrador conecta planilha ou altera fórmulas (migração 20261127120000)
+  union all
+  select 'Planilha conectada e fórmulas financeiras só por administrador',
+         coalesce((select prosrc like '%Somente administradores podem conectar planilhas%' from pg_proc where proname='secap_save_project_state' limit 1), false)
 )
 select item, ok from checks order by ok, item;

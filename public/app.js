@@ -4698,7 +4698,7 @@ function openConnectSheet(pid) {
 }
 async function connectSheet(pid) {
   const p = sheetSyncProject(pid), form = document.getElementById('connectSheetForm');
-  if (!p || !form || !canEdit(p)) return;
+  if (!p || !form || !isSysAdmin()) return;
   const idField = sheetIdField(p), url = String(new FormData(form).get('url') || '').trim();
   const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (!match) return notify('Use o link de uma planilha do Google Sheets (docs.google.com/spreadsheets/d/...).');
@@ -4738,7 +4738,7 @@ function sheetSyncProject(pid) {return db.projects.find((x) => x.id === pid);}
 function openSheetSyncPanel(pid) {
   const p = sheetSyncProject(pid), s = p?.sheetSync;
   if (!s) return;
-  const can = canEdit(p), idField = (p.fields || []).find((f) => f.id === s.campoId);
+  const can = isSysAdmin(), idField = (p.fields || []).find((f) => f.id === s.campoId);
   const when = s.conectadoEm ? new Date(s.conectadoEm).toLocaleString('pt-BR') : '';
   modal(
     'Sincronia com a planilha',
@@ -4782,7 +4782,7 @@ async function loadSheetSyncStatus(pid) {
 }
 function toggleSheetSync(pid) {
   const p = sheetSyncProject(pid);
-  if (!p?.sheetSync || !canEdit(p)) return;
+  if (!p?.sheetSync || !isSysAdmin()) return;
   p.sheetSync.ativo = !p.sheetSync.ativo;
   persist(p.sheetSync.ativo ? 'Retomou sincronia da planilha' : 'Pausou sincronia da planilha', p, '', p.sheetSync.url || p.sheetSync.planilhaId);
   render();
@@ -4800,7 +4800,7 @@ function confirmDisconnectSheet(pid) {
 }
 function disconnectSheet(pid) {
   const p = sheetSyncProject(pid);
-  if (!p?.sheetSync || !canEdit(p)) return;
+  if (!p?.sheetSync || !isSysAdmin()) return;
   const link = p.sheetSync.url || p.sheetSync.planilhaId;
   delete p.sheetSync;
   persist('Desconectou planilha', p, link, '');
@@ -4815,7 +4815,8 @@ editProject = function (id = '') {
   const p = id && sheetSyncProject(id), s = p?.sheetSync, form = document.getElementById('projectForm');
   if (!p || !form || p.externalUrl) return;
   if (!s) {
-    if (canEdit(p))
+    // Só o administrador conecta: a sincronia grava com a conta do servidor, sem as travas de obra e campo.
+    if (isSysAdmin())
       form.insertAdjacentHTML(
         'afterbegin',
         `<div class="summary-strip" style="text-align:left;margin-bottom:16px"><p style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;width:100%"><span><strong>Planilha Google</strong><br><small>Mantenha as obras deste projeto sincronizadas com uma planilha do Google Sheets.</small></span><button type="button" class="btn secondary small" onclick="openConnectSheet('${esc(id)}')">Conectar a uma planilha</button></p></div>`

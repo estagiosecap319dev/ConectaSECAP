@@ -775,7 +775,7 @@ def project_configs(base, portal):
             continue
         cfg = dict(base)
         cfg.update(planilha_id=str(link['planilhaId']), projeto_id=str(p.get('id')), aba=str(link.get('aba') or ''),
-                   campo_id=str(link['campoId']), primeira_sincronia='planilha', _nome=p.get('name') or '')
+                   campo_id=str(link['campoId']), primeira_sincronia='portal', _nome=p.get('name') or '')
         out.append(cfg)
     return out
 
