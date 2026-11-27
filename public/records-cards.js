@@ -23,7 +23,7 @@
     };
     var toggle =
       '<div class="view-toggle" role="group" aria-label="Formato de exibição das obras">' +
-      button('master', 'menu', 'Master-detail') + button('table', 'sheet', 'Tabela') + button('cards', 'dashboard', 'Cards') + '</div>';
+      button('master', 'menu', 'Lista agrupada') + button('table', 'sheet', 'Tabela') + button('cards', 'dashboard', 'Cards') + '</div>';
     return '<div class="municipal-project-detail">'+html.replace('<h2>Obras e registros</h2>', '<h2>Obras e registros</h2>' + toggle)+'</div>';
   };
 
@@ -32,7 +32,7 @@
   table = function (rs, limited) {
     if (window.recordsView === 'master' && !limited && projectId && rs.length) {
       var mp = visible().find(function (x) { return x.id === projectId; });
-      if (mp) return masterDetail(rs, mp);
+      if (mp) return groupedList(rs, mp);
     }
     if (window.recordsView !== 'cards' || limited || !projectId || !rs.length) { const html=tableBefore.apply(this, arguments); return projectId&&!limited?sheetMarkup(html):html; }
     var p = visible().find(function (x) { return x.id === projectId; });
@@ -211,6 +211,79 @@
     window.mdSelect(pid, next.dataset.rid);
     next.focus();
   };
+  /* ======================================================================
+     4) LISTA AGRUPADA: obras agrupadas por Órgão, Tipo de projeto ou Região,
+     ou todas juntas ("Sem agrupamento"). A escolha fica salva no navegador.
+     ====================================================================== */
+  var GKEY = 'secap-records-group';
+  var GROUPS = [['none', 'Sem agrupamento'], ['orgao', 'Órgão Responsável'], ['tipo', 'Tipo de Projeto'], ['regiao', 'Região Urbana']];
+  var groupBy = 'tipo';
+  try { var g = localStorage.getItem(GKEY); if (GROUPS.some(function (x) { return x[0] === g; })) groupBy = g; } catch (e) {}
+  var groupClosed = {};
+  var PRIO_ORDER = [['muitoalta', 'Muito Alta'], ['alta', 'Alta'], ['media', 'Média'], ['baixa', 'Baixa']];
+  window.setRecordsGroup = function (mode) {
+    groupBy = mode;
+    try { localStorage.setItem(GKEY, mode); } catch (e) {}
+    render();
+  };
+  window.toggleRecordsGroup = function (el) {
+    var box = el.closest('.gl-group'), key = box.dataset.gkey, open = box.classList.toggle('is-closed') === false;
+    groupClosed[key] = !open;
+    el.setAttribute('aria-expanded', open);
+  };
+  function glPrioKey(v) { var k = mdKey(v); for (var i = 0; i < PRIO_ORDER.length; i++) if (k === PRIO_ORDER[i][0] || (i === 0 && /critic/.test(k))) return i; return 9; }
+  function glRow(r, p, F) {
+    var stage = mdText(r, F.etapa), sei = mdText(r, F.sei), resp = mdText(r, F.responsavel);
+    var meta = [sei ? 'SEI: ' + sei : '', groupBy !== 'regiao' ? mdText(r, F.regiao) : '', groupBy !== 'orgao' ? mdText(r, F.orgao) : '', resp ? 'Resp.: ' + resp : ''].filter(Boolean);
+    var open = 'editRecord(this.dataset.pid, this.dataset.rid)';
+    return '<li class="gl-row"><button type="button" class="gl-main" data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" onclick="' + open + '">' +
+      '<span class="md-id">ID ' + esc(mdText(r, F.id) || '—') + '</span>' +
+      '<span class="gl-text"><b>' + esc(recordTitle(r, p)) + '</b>' + (meta.length ? '<small>' + esc(meta.join(' • ')) + '</small>' : '') + '</span></button>' +
+      '<span class="gl-side">' + (stage ? '<span class="md-stage' + (/conclu|entreg/i.test(stage) ? ' is-done' : '') + '">' + esc(stage) + '</span>' : '') +
+      mdPriorityChip(mdText(r, F.prioridade)) +
+      '<button type="button" class="gl-open" data-pid="' + esc(p.id) + '" data-rid="' + esc(r.id) + '" onclick="' + open + '">Abrir obra →</button></span></li>';
+  }
+  function glSummary(items, F) {
+    var best = 9, count = 0;
+    items.forEach(function (r) { var i = glPrioKey(mdText(r, F.prioridade)); if (i < best) { best = i; count = 1; } else if (i === best) count++; });
+    if (best > 1) return '';
+    return '<span class="md-priority ' + (best === 0 ? 'is-critical' : 'is-high') + '">' + count + ' ' + PRIO_ORDER[best][1] + '</span>';
+  }
+  function groupedList(rs, p) {
+    var F = mdFields(p);
+    var records = rs.map(function (r) { return (p.records || []).find(function (x) { return String(x.id) === String(r.id); }) || r; });
+    var bar = '<div class="gl-bar"><span>Agrupar registros por:</span><div class="gl-seg" role="group" aria-label="Agrupar registros por">' +
+      GROUPS.map(function (x) { var on = groupBy === x[0]; return '<button type="button" class="' + (on ? 'is-on' : '') + '" aria-pressed="' + on + '" onclick="setRecordsGroup(\'' + x[0] + '\')">' + x[1] + '</button>'; }).join('') + '</div></div>';
+    var field = groupBy === 'none' ? null : F[groupBy];
+    var body;
+    if (groupBy === 'none') {
+      body = '<div class="gl-group gl-flat"><ul class="gl-rows">' + records.map(function (r) { return glRow(r, p, F); }).join('') + '</ul></div>';
+    } else {
+      var map = {}, order = [];
+      records.forEach(function (r) {
+        var name = mdText(r, field) || 'Não informado';
+        var key = mdKey(name) || 'naoinformado';
+        if (!map[key]) { map[key] = { name: name, items: [] }; order.push(key); }
+        map[key].items.push(r);
+      });
+      order.sort(function (a, b) {
+        if (a === 'naoinformado') return 1; if (b === 'naoinformado') return -1;
+        return map[a].name.localeCompare(map[b].name, 'pt-BR', { numeric: true });
+      });
+      body = (field ? '' : '<p class="gl-note">Esta pasta não tem um campo de ' + esc(GROUPS.find(function (x) { return x[0] === groupBy; })[1].toLowerCase()) + '.</p>') +
+        order.map(function (key) {
+          var grp = map[key], gk = groupBy + ':' + key, closed = !!groupClosed[gk];
+          return '<div class="gl-group' + (closed ? ' is-closed' : '') + '" data-gkey="' + esc(gk) + '">' +
+            '<button type="button" class="gl-head" aria-expanded="' + !closed + '" onclick="toggleRecordsGroup(this)">' +
+            '<span class="gl-chev" aria-hidden="true"></span><b>' + esc(grp.name) + '</b><span class="gl-count">' + grp.items.length + (grp.items.length === 1 ? ' obra' : ' obras') + '</span>' +
+            '<span class="gl-sum">' + glSummary(grp.items, F) + '</span></button>' +
+            '<ul class="gl-rows">' + grp.items.map(function (r) { return glRow(r, p, F); }).join('') + '</ul></div>';
+        }).join('');
+    }
+    return '<div class="gl-wrap">' + bar + '<div class="gl-body">' + body + '</div></div>' +
+      '<div class="tablefoot"><span>' + rs.length + ' obra(s)</span><span>Clique na obra para abrir</span></div>';
+  }
+
   window.mdCopy = function (text) {
     var done = function () { notify('Número do processo copiado.'); };
     if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, done); else done();

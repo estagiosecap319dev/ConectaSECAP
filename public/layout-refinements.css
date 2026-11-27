@@ -1404,4 +1404,44 @@ body.menu-collapsed .sidebar-resizer {
 .md-all { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; font: inherit; font-size: 13px; font-weight: 600; color: #002f47; background: #fff; border: 1px solid #b9c9d3; border-radius: 9px; cursor: pointer; }
 .md-all:hover { border-color: #002f47; background: #f3f7f9; }
 .md-all svg { width: 15px; height: 15px; }
+/* ================= Obras: Lista agrupada ================= */
+.gl-wrap { display: flex; flex-direction: column; gap: 18px; padding: 4px 0 8px; }
+.gl-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.gl-bar > span { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: #5f7584; }
+.gl-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: #fff; border: 1px solid #dfe7ec; border-radius: 9px; }
+.gl-seg button { padding: 6px 12px; font: inherit; font-size: 13px; font-weight: 600; color: #1f3f52; background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.gl-seg button:hover { background: #f1f5f8; }
+.gl-seg button.is-on { color: #fff; background: #002f47; }
+.gl-body { display: flex; flex-direction: column; gap: 16px; }
+.gl-note { margin: 0; font-size: 13px; color: #5f7584; }
+.gl-group { background: #fff; border: 1px solid #dfe7ec; border-radius: 14px; overflow: hidden; }
+.gl-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 16px 20px; font: inherit; text-align: left; background: #f3f6f9; border: 0; border-bottom: 1px solid #e3eaef; cursor: pointer; color: #0f2b3c; }
+.gl-head:focus-visible { outline: 3px solid #002f47; outline-offset: -3px; }
+.gl-head > b { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.2px; }
+.gl-chev { flex-shrink: 0; width: 8px; height: 8px; margin: -4px 4px 0 2px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .15s; }
+.gl-group.is-closed .gl-chev { margin-top: 0; transform: rotate(-45deg); }
+.gl-group.is-closed .gl-head { border-bottom: 0; }
+.gl-group.is-closed .gl-rows { display: none; }
+.gl-count { padding: 2px 9px; font-size: 12px; font-weight: 700; color: #fff; background: #002f47; border-radius: 999px; }
+.gl-sum { margin-left: auto; }
+.gl-rows { margin: 0; padding: 0; list-style: none; }
+.gl-row { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-top: 1px solid #edf1f4; }
+.gl-rows > .gl-row:first-child { border-top: 0; }
+.gl-row:hover { background: #fafcfd; }
+.gl-main { display: flex; align-items: flex-start; gap: 12px; flex: 1; min-width: 0; padding: 0; font: inherit; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; }
+.gl-main:focus-visible { outline: 3px solid #002f47; outline-offset: 3px; border-radius: 4px; }
+.gl-main .md-id { flex-shrink: 0; margin-top: 1px; }
+.gl-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gl-text b { font-size: 14px; font-weight: 700; line-height: 1.4; color: #0f2b3c; }
+.gl-main:hover .gl-text b { text-decoration: underline; }
+.gl-text small { font-size: 12px; color: #5f7584; overflow-wrap: anywhere; }
+.gl-side { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.gl-side .md-stage { white-space: nowrap; }
+.md-stage.is-done { color: #15803d; background: #e9f8f1; border-color: #b6e5cf; }
+.gl-open { padding: 4px 2px; font: inherit; font-size: 13px; font-weight: 700; color: #e1650f; background: none; border: 0; cursor: pointer; white-space: nowrap; }
+.gl-open:hover { text-decoration: underline; }
+@media (max-width: 900px) {
+  .gl-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .gl-side { flex-wrap: wrap; padding-left: 52px; }
+}
 .admin-bell-kind.is-reuniao { background: #fff1e6; color: #c2550c; }
