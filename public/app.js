@@ -1758,7 +1758,7 @@ function loadUserProjectFilters(pid = projectId) {
     const raw = localStorage.getItem(customFilterStorageKey(pid));
     const parsed = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(parsed)) return [];
-    const allowedOps = new Set(['contains', 'equals', 'empty', 'not_empty']);
+    const allowedOps = new Set(['contains', 'equals', 'empty', 'not_empty', 'in']);
     return parsed
       .filter((item) => item && typeof item.fieldId === 'string')
       .map((item) => ({
@@ -1767,6 +1767,7 @@ function loadUserProjectFilters(pid = projectId) {
         operator: allowedOps.has(item.operator) ? item.operator : 'contains',
         value: String(item.value ?? '').slice(0, 200),
         valueTo: String(item.valueTo ?? '').slice(0, 200),
+        values: Array.isArray(item.values) ? item.values.map((v) => String(v).slice(0, 200)).slice(0, 200) : [],
       }));
   } catch {
     return [];
@@ -1794,6 +1795,12 @@ function matchesCustomFilters(r, fields) {
 
     if (flt.operator === 'empty') return raw === '' || raw == null;
     if (flt.operator === 'not_empty') return raw !== '' && raw != null;
+    // Múltipla escolha: nenhuma opção marcada = "Todas".
+    if (flt.operator === 'in') {
+      if (!flt.values?.length) return true;
+      const hay = String(raw ?? '').trim().toLowerCase();
+      return flt.values.some((v) => String(v).trim().toLowerCase() === hay);
+    }
 
     if (f.type === 'date') {
       const val = String(raw || '');
@@ -1821,6 +1828,16 @@ function matchesCustomFilters(r, fields) {
       .toLowerCase();
     return flt.operator === 'equals' ? hay === needle : hay.includes(needle);
   });
+}
+
+// Opções de um campo para o filtro de múltipla escolha (lista do campo ou valores já usados nas obras).
+function customFilterOptions(p, f) {
+  if (!p || !f || ['date', 'number', 'currency'].includes(f.type)) return [];
+  if (Array.isArray(f.options) && f.options.length) return f.options.map(String);
+  const used = [
+    ...new Set((p.records || []).map((r) => String(r[f.id] ?? '').trim()).filter((v) => v !== '')),
+  ].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+  return used.length <= 60 ? used : [];
 }
 
 function openAddCustomFilter(pid) {
@@ -1882,21 +1899,19 @@ function updateCustomFilterInput(pid) {
     return;
   }
 
-  const uniqueValues = [
-    ...new Set(p.records.map((r) => String(r[f.id] ?? '').trim()).filter((v) => v !== '')),
-  ].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const optionsList = customFilterOptions(p, f);
 
-  const optionsList = Array.isArray(f.options) && f.options.length ? f.options : uniqueValues;
-
-  if (optionsList.length > 0 && optionsList.length <= 60) {
+  if (optionsList.length > 0) {
     container.innerHTML = `
-      <input type="hidden" name="operator" value="equals">
+      <input type="hidden" name="operator" value="in">
       <div class="field">
-        <label>Valor para "${esc(f.name)}" *</label>
-        <select name="value" required>
-          <option value="">Selecione uma opção...</option>
-          ${optionsList.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')}
-        </select>
+        <label>Valores de "${esc(f.name)}"</label>
+        <div class="cf-checklist">
+          ${optionsList
+            .map((v) => `<label class="cf-option"><input type="checkbox" name="values" value="${esc(v)}"> <span>${esc(v)}</span></label>`)
+            .join('')}
+        </div>
+        <small class="subtitle">Marque um ou mais valores. Sem nenhum marcado, o filtro mostra todas; você pode ajustar depois, direto na barra de filtros.</small>
       </div>`;
   } else {
     container.innerHTML = `
@@ -1924,12 +1939,19 @@ function applyCustomFilter(pid) {
   const operator = String(d.get('operator') || 'contains');
   const value = String(d.get('value') ?? '').trim();
   const valueTo = String(d.get('valueTo') ?? '').trim();
+  const values = d.getAll('values').map(String);
 
-  if (!['empty', 'not_empty'].includes(operator) && !value && !valueTo) {
-    return notify('Informe um valor para aplicar o filtro.');
+  if (operator === 'in') {
+    // Um seletor por campo: se já existe, só atualiza a seleção.
+    const existing = customProjectFilters.find((x) => x.operator === 'in' && x.fieldId === fieldId);
+    if (existing) existing.values = values;
+    else customProjectFilters.push({ id: uid(), fieldId, operator, value: '', valueTo: '', values });
+  } else {
+    if (!['empty', 'not_empty'].includes(operator) && !value && !valueTo) {
+      return notify('Informe um valor para aplicar o filtro.');
+    }
+    customProjectFilters.push({ id: uid(), fieldId, operator, value, valueTo });
   }
-
-  customProjectFilters.push({ id: uid(), fieldId, operator, value, valueTo });
   saveUserProjectFilters(pid);
   tableLimit = 50;
   closeModal();
@@ -1950,11 +1972,89 @@ function clearCustomFilters() {
   render();
 }
 
+// Seletor de múltipla escolha ("Macroetapa: Todas ▾") para filtros de campos com lista de opções.
+let customFilterOpenMenu = '';
+function customFilterSelect(p, flt) {
+  const f = p.fields.find((x) => x.id === flt.fieldId);
+  const fname = f ? f.name : flt.fieldId;
+  const chosen = flt.values || [];
+  const options = customFilterOptions(p, f);
+  // Valores marcados que não existem mais nas opções continuam visíveis para poderem ser desmarcados.
+  const all = [...options, ...chosen.filter((v) => !options.includes(v))];
+  const label = !chosen.length ? 'Todas' : chosen.length === 1 ? chosen[0] : `${chosen.length} selecionadas`;
+  const open = customFilterOpenMenu === flt.id;
+  return `<div class="cf-select${open ? ' is-open' : ''}${chosen.length ? ' has-value' : ''}" data-fid="${esc(flt.id)}">
+    <span class="cf-select-label" id="cfl-${esc(flt.id)}">${esc(fname)}</span>
+    <button type="button" class="cf-select-btn" aria-haspopup="true" aria-expanded="${open}" aria-labelledby="cfl-${esc(flt.id)} cfv-${esc(flt.id)}" onclick="toggleCustomFilterMenu(this.closest('.cf-select').dataset.fid)">
+      <span id="cfv-${esc(flt.id)}" title="${esc(chosen.join(', '))}">${esc(label)}</span><i class="cf-chev" aria-hidden="true"></i>
+    </button>
+    <div class="cf-menu" role="group" aria-label="${esc(fname)}"${open ? '' : ' hidden'}>
+      <label class="cf-option cf-all"><input type="checkbox" value="" ${chosen.length ? '' : 'checked'} onchange="setCustomFilterValues(this.closest('.cf-select').dataset.fid, [])"> <span>Todas</span></label>
+      <div class="cf-options">${all
+        .map(
+          (v) =>
+            `<label class="cf-option"><input type="checkbox" value="${esc(v)}" ${chosen.includes(v) ? 'checked' : ''} onchange="toggleCustomFilterValue(this.closest('.cf-select').dataset.fid, this)"> <span>${esc(v)}</span></label>`
+        )
+        .join('')}</div>
+      <button type="button" class="cf-remove" onclick="removeCustomFilter(this.closest('.cf-select').dataset.fid)">${icon('close')} Remover filtro</button>
+    </div>
+  </div>`;
+}
+function toggleCustomFilterMenu(fid) {
+  customFilterOpenMenu = customFilterOpenMenu === fid ? '' : fid;
+  document.querySelectorAll('.cf-select').forEach((box) => {
+    const on = box.dataset.fid === customFilterOpenMenu;
+    box.classList.toggle('is-open', on);
+    box.querySelector('.cf-menu').hidden = !on;
+    box.querySelector('.cf-select-btn').setAttribute('aria-expanded', on);
+  });
+}
+function setCustomFilterValues(fid, values) {
+  const flt = customProjectFilters.find((x) => x.id === fid);
+  if (!flt) return;
+  flt.values = values;
+  saveUserProjectFilters(projectId);
+  tableLimit = 50;
+  // Mantém a lista aberta e o foco na mesma opção para o usuário seguir marcando.
+  const active = document.activeElement;
+  const focused = active?.closest?.('.cf-option') ? active.value : null;
+  const scroll = document.querySelector('.cf-select.is-open .cf-options')?.scrollTop || 0;
+  customFilterOpenMenu = fid;
+  render();
+  const box = document.querySelector(`.cf-select[data-fid="${CSS.escape(fid)}"]`);
+  const list = box?.querySelector('.cf-options');
+  if (list) list.scrollTop = scroll;
+  if (focused != null) {
+    const input = [...(box?.querySelectorAll('.cf-option input') || [])].find((i) => i.value === focused);
+    input?.focus({ preventScroll: true });
+  }
+}
+function toggleCustomFilterValue(fid, input) {
+  const flt = customProjectFilters.find((x) => x.id === fid);
+  if (!flt) return;
+  const set = new Set(flt.values || []);
+  if (input.checked) set.add(input.value);
+  else set.delete(input.value);
+  setCustomFilterValues(fid, [...set]);
+}
+document.addEventListener('click', (e) => {
+  if (customFilterOpenMenu && !e.target.closest('.cf-select')) toggleCustomFilterMenu(customFilterOpenMenu);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !customFilterOpenMenu) return;
+  const btn = document.querySelector(`.cf-select[data-fid="${CSS.escape(customFilterOpenMenu)}"] .cf-select-btn`);
+  toggleCustomFilterMenu(customFilterOpenMenu);
+  btn?.focus();
+});
+
 function renderCustomFilterChips(p) {
   if (!customProjectFilters.length) return '';
+  const selects = customProjectFilters.filter((flt) => flt.operator === 'in');
+  const chips = customProjectFilters.filter((flt) => flt.operator !== 'in');
   return `<div class="custom-filter-bar" role="region" aria-label="Filtros ativos">
-    <span class="custom-filter-label">Filtros ativos:</span>
-    ${customProjectFilters
+    ${selects.map((flt) => customFilterSelect(p, flt)).join('')}
+    ${chips.length ? '<span class="custom-filter-label">Filtros ativos:</span>' : ''}
+    ${chips
       .map((flt) => {
         const f = p.fields.find((x) => x.id === flt.fieldId);
         const fname = f ? f.name : flt.fieldId;
