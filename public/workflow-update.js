@@ -180,16 +180,83 @@ function kanbanDragStart(e, key) {
   e.dataTransfer.effectAllowed = 'move';
   const el = e.currentTarget;
   setTimeout(() => el.classList.add('dragging'), 0);
+  startKanbanAutoScroll(e);
 }
 function kanbanDragEnd(el) {
   el.classList.remove('dragging');
   document.querySelectorAll('.tlist.dragover').forEach((c) => c.classList.remove('dragover'));
+  stopKanbanAutoScroll();
 }
 function dropObra(e, stage) {
   e.preventDefault();
+  stopKanbanAutoScroll();
   const [pid, rid] = e.dataTransfer.getData('text/plain').split('|');
-  if (pid && rid) moveObra(pid, rid, stage);
+  if (!pid || !rid) return;
+  // Ao mover, o quadro é redesenhado: mantém a rolagem para a obra não "sumir" da tela.
+  const left = kanbanScroller()?.scrollLeft;
+  Promise.resolve(moveObra(pid, rid, stage)).finally(() => {
+    const sc = kanbanScroller();
+    if (sc && left != null) sc.scrollLeft = left;
+  });
 }
+
+// Rolagem automática ao arrastar: perto da borda do quadro ele rola para o lado (para alcançar
+// as últimas colunas); perto do topo ou do rodapé da tela, a página rola para cima ou para baixo.
+function scrollableAncestor(el, axis) {
+  for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    const s = getComputedStyle(n);
+    if (axis === 'x' && /auto|scroll/.test(s.overflowX) && n.scrollWidth > n.clientWidth + 1) return n;
+    if (axis === 'y' && /auto|scroll/.test(s.overflowY) && n.scrollHeight > n.clientHeight + 1) return n;
+  }
+  return null;
+}
+function kanbanScroller() {
+  const board = document.querySelector('.trello-board');
+  return board ? scrollableAncestor(board, 'x') || board : null;
+}
+let kanbanAuto = null;
+function startKanbanAutoScroll(e) {
+  stopKanbanAutoScroll();
+  const board = document.querySelector('.trello-board');
+  kanbanAuto = {
+    x: e.clientX,
+    y: e.clientY,
+    sx: kanbanScroller(),
+    sy: (board && scrollableAncestor(board, 'y')) || document.scrollingElement,
+    frame: 0,
+  };
+  const speed = (dist, zone) => (dist < zone ? Math.ceil(((zone - dist) / zone) * 22) : 0);
+  const tick = () => {
+    if (!kanbanAuto) return;
+    const { x, y, sx, sy } = kanbanAuto;
+    if (sx && x) {
+      const r = sx.getBoundingClientRect(),
+        zone = Math.min(120, r.width / 4);
+      if (x < r.left + zone) sx.scrollLeft -= speed(x - r.left, zone);
+      else if (x > r.right - zone) sx.scrollLeft += speed(r.right - x, zone);
+    }
+    if (sy && y) {
+      const top = sy === document.scrollingElement ? 0 : sy.getBoundingClientRect().top,
+        bottom = sy === document.scrollingElement ? window.innerHeight : sy.getBoundingClientRect().bottom,
+        zone = 90;
+      if (y < top + zone) sy.scrollTop -= speed(y - top, zone);
+      else if (y > bottom - zone) sy.scrollTop += speed(bottom - y, zone);
+    }
+    kanbanAuto.frame = requestAnimationFrame(tick);
+  };
+  kanbanAuto.frame = requestAnimationFrame(tick);
+}
+function stopKanbanAutoScroll() {
+  if (kanbanAuto) cancelAnimationFrame(kanbanAuto.frame);
+  kanbanAuto = null;
+}
+// A posição do cursor durante o arrastar só chega pelo "dragover".
+document.addEventListener('dragover', (e) => {
+  if (!kanbanAuto) return;
+  kanbanAuto.x = e.clientX;
+  kanbanAuto.y = e.clientY;
+});
+document.addEventListener('drop', stopKanbanAutoScroll);
 function editWorkflow(id = '') {
   if (me()?.role !== 'Administrador') return;
   const b = workflowSettings().boards.find((q) => q.id === id);
