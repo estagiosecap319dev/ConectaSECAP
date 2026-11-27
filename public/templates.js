@@ -1620,10 +1620,11 @@ function setObraReviewMark(button) {
   updateObraReviewProgress();
 }
 
-// Marca de uma vez todas as obras visíveis (respeita a busca) com a mesma situação.
+// Marca de uma vez as obras visíveis de "Demais obras" (respeita a busca) com a mesma situação.
+// As "Editadas nesta sessão" não mudam: cada uma é marcada pelo usuário, uma a uma.
 function markAllObraReview(value) {
   document
-    .querySelectorAll('#exitAuditForm .obra-review-row:not([hidden])')
+    .querySelectorAll('#exitAuditForm .obra-review-group.is-unchanged .obra-review-row:not([hidden])')
     .forEach((row) => applyObraReviewMark(row, value));
   updateObraReviewProgress();
 }
@@ -1750,9 +1751,9 @@ function openExitAuditChecklistModal(onCompleteExit) {
          <div class="obra-review-warning" id="obraReviewWarning" role="alert" hidden></div>
          <div class="obra-review-bulk">
            <p class="obra-review-progress" id="obraReviewProgress" aria-live="polite">${review.filter((item) => obraReviewMark(item.rid)).length} de ${review.length} obra(s) marcada(s)</p>
-           <div class="obra-review-bulk-actions" role="group" aria-label="Marcar todas as obras">
-             <button type="button" class="orr-bulk is-unchanged" onclick="markAllObraReview('sem_alteracao')" title="Marca todas as obras listadas como Sem alteração">Marcar todas: Sem alteração</button>
-             <button type="button" class="orr-bulk is-changed" onclick="markAllObraReview('alterada')" title="Marca todas as obras listadas como Alteração feita">Marcar todas: Alteração feita</button>
+           <div class="obra-review-bulk-actions" role="group" aria-label="Marcar todas as demais obras">
+             <button type="button" class="orr-bulk is-unchanged" onclick="markAllObraReview('sem_alteracao')" title="Marca as Demais obras como Sem alteração. As editadas nesta sessão não mudam.">Marcar todas: Sem alteração</button>
+             <button type="button" class="orr-bulk is-changed" onclick="markAllObraReview('alterada')" title="Marca as Demais obras como Alteração feita. As editadas nesta sessão não mudam.">Marcar todas: Alteração feita</button>
            </div>
          </div>
          ${
