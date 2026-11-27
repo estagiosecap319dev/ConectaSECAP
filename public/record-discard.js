@@ -4,7 +4,8 @@
    permitia salvar; o X, o clique fora e a tecla Esc fechavam sem perguntar.
    Agora, se houver alteração ainda não salva, aparece "Tem certeza que deseja
    cancelar?". Ao confirmar, as alterações não salvas são descartadas (nada é
-   gravado). Obras já salvas nesta sessão seguem para as justificativas, como antes.
+   gravado). Com uma obra já salva aguardando justificativa, "Cancelar" (e X/Esc no
+   formulário) também sai: o que foi salvo fica salvo, sem passar pelas justificativas.
    ============================================================================ */
 
 // Projeto e obra do formulário aberto (lidos do onsubmit do #recordForm).
@@ -85,23 +86,45 @@ function confirmDiscardRecordChanges(unsaved) {
   });
 }
 
+// Obras desta sessão já salvas que ainda aguardam a revisão (justificativas).
+function sessionHasSavedPending() {
+  return (
+    typeof secapEditSession !== 'undefined' &&
+    secapEditSession.active &&
+    [...secapEditSession.records.values()].some((e) => e.saved && e.changes.size)
+  );
+}
+
+// Sai da edição sem passar pelas justificativas. O que já foi salvo continua salvo
+// (e registrado na auditoria campo a campo); só a marcação da revisão não é registrada.
+function exitRecordEditing(pid, rid) {
+  if (typeof resetSecapEditSession === 'function') resetSecapEditSession();
+  closeModal();
+  if (rid && typeof editRecord === 'function') editRecord(pid, rid);
+}
+
 let recordCancelBusy = false;
-const handleCancelFromRecordFormBefore = handleCancelFromRecordForm;
 handleCancelFromRecordForm = async function (pid, rid = '') {
   if (recordCancelBusy) return;
   const unsaved = unsavedRecordChanges(pid, rid);
-  if (!unsaved.length) return handleCancelFromRecordFormBefore(pid, rid);
+  const savedPending = sessionHasSavedPending();
+  if (!unsaved.length) {
+    // Antes, com uma obra já salva, "Cancelar" voltava às justificativas e o usuário
+    // ficava preso entre "Voltar à edição" e "Cancelar". Agora "Cancelar" sempre sai.
+    exitRecordEditing(pid, rid);
+    if (savedPending) notify('Edição encerrada. As alterações já salvas foram mantidas.');
+    return;
+  }
   recordCancelBusy = true;
   try {
     if (!(await confirmDiscardRecordChanges(unsaved))) return;
     discardUnsavedRecordChanges();
-    // Obras já salvas nesta sessão: segue o fluxo normal (justificativas). Sem nada salvo: só sai.
-    const stillSaved = typeof secapEditSession !== 'undefined' && secapEditSession.active && [...secapEditSession.records.values()].some((e) => e.saved && e.changes.size);
-    if (stillSaved) return handleCancelFromRecordFormBefore(pid, rid);
-    if (typeof resetSecapEditSession === 'function') resetSecapEditSession();
-    closeModal();
-    if (rid && typeof editRecord === 'function') editRecord(pid, rid);
-    notify('Alterações descartadas. Nada foi salvo.');
+    exitRecordEditing(pid, rid);
+    notify(
+      savedPending
+        ? 'Alterações não salvas descartadas. As já salvas foram mantidas.'
+        : 'Alterações descartadas. Nada foi salvo.'
+    );
   } finally {
     recordCancelBusy = false;
   }
@@ -110,7 +133,8 @@ handleCancelFromRecordForm = async function (pid, rid = '') {
 // X do formulário, clique fora e Esc: mesmo caminho do "Cancelar" quando há algo digitado.
 function recordFormHasUnsaved() {
   const ids = recordFormIds();
-  return ids && !document.getElementById('discardConfirm') && unsavedRecordChanges(ids.pid, ids.rid).length > 0 ? ids : null;
+  if (!ids || document.getElementById('discardConfirm')) return null;
+  return unsavedRecordChanges(ids.pid, ids.rid).length > 0 || sessionHasSavedPending() ? ids : null;
 }
 // No window (e não no document): roda antes da proteção de saída do templates.js, que leva
 // direto às justificativas sem opção de descartar.
