@@ -1,10 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/weekly-notify.py": { "includeFiles": "{weekly_notify,sheet_sync}.py", "maxDuration": 60 },
-    "api/access-request-notify.py": { "includeFiles": "{access_request_notify,meeting_notify,weekly_notify,sheet_sync}.py", "maxDuration": 60 },
-    "api/sheet-sync.py": { "includeFiles": "sheet_sync.py", "maxDuration": 60 },
-    "api/meeting-notify.py": { "includeFiles": "{meeting_notify,weekly_notify,sheet_sync}.py", "maxDuration": 60 }
+    "api/weekly-notify.py": { "excludeFiles": "{public/**,supabase/**,scripts/**,.claude/**,.vscode/**,*.pdf,*.md,*.bat,*.example.json,LICENSE}", "includeFiles": "{weekly_notify,sheet_sync}.py", "maxDuration": 60 },
+    "api/access-request-notify.py": { "excludeFiles": "{public/**,supabase/**,scripts/**,.claude/**,.vscode/**,*.pdf,*.md,*.bat,*.example.json,LICENSE}", "includeFiles": "{access_request_notify,meeting_notify,weekly_notify,sheet_sync}.py", "maxDuration": 60 },
+    "api/sheet-sync.py": { "excludeFiles": "{public/**,supabase/**,scripts/**,.claude/**,.vscode/**,*.pdf,*.md,*.bat,*.example.json,LICENSE}", "includeFiles": "sheet_sync.py", "maxDuration": 60 },
+    "api/meeting-notify.py": { "excludeFiles": "{public/**,supabase/**,scripts/**,.claude/**,.vscode/**,*.pdf,*.md,*.bat,*.example.json,LICENSE}", "includeFiles": "{meeting_notify,weekly_notify,sheet_sync}.py", "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/weekly-notify", "schedule": "0 11 * * 1" },
